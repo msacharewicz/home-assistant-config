@@ -1,0 +1,24 @@
+esp32:
+  board: lolin32_lite
+  framework:
+    type: esp-idf
+
+# Configuration
+substitutions:
+
+  name: "esp-maan-hub"
+  friendly_name: "Poligon"
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+  # Pinout
+  pin_sda:             23
+  pin_scl:             19
+  pin_status_led:      22
+
+packages:
+  - !include packages/template.yaml
+  - !include packages/status_led.yaml
+
+# ============================================================================

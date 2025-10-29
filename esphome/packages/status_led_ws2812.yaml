@@ -1,0 +1,88 @@
+# My template for WS2812 RGB LED found on some
+# of my boards, specifically:
+# - Waveshare 30547: ESP32-C6-DevKitC-1
+# 
+# It binds the ESPHome staus_led component into
+# the only LED that's available on the boards.
+
+light:
+
+  # The status_led component that serves as
+  # a signal/status source, hidden from user.
+  # Bound to a template output we use to catch
+  # the events.
+
+  - platform: status_led
+    id: status_led_source
+    name: "Status LED (source)"
+    output: status_output
+    internal: true
+
+  # The target LED we will be using as our 
+  # actual status_led.
+
+  - platform: esp32_rmt_led_strip
+    name: "Status LED"
+    id: status_led_light
+    pin: ${pin_status_led}
+    rgb_order: RGB
+    chipset: ws2812
+    num_leds: 1
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 100ms
+    entity_category: DIAGNOSTIC
+
+output:
+
+  # The proxy output that relays the state 
+  # of the source status_led into our RGB LED.
+
+  - platform: template
+    id: status_output
+    type: binary
+    write_action:
+      - lambda: |-
+
+            // When status_led platform takes over our RGB LED,
+            // we store the existing value to restore it later
+            // when the platform shuts down the LED.
+            // Since the RGB LED might be our only LED and we may
+            // be wanting to use it to relay other statuses, this
+            // makes the red blinks weave with our current setting.
+
+            static LightColorValues restore_values;
+            static bool led_on = false;
+            
+            if (state > 0 && !led_on) {
+
+              // When status_led turns on, store the preexisting 
+              // LED values
+
+              restore_values = id(status_led_light).current_values;
+
+              // Then turn on the red light.
+              
+              auto call = id(status_led_light).make_call();
+              call.set_transition_length(0);
+              call.set_brightness(1);
+              call.set_rgb(1,0,0);
+              call.perform();
+              
+              // Prevent further changes on subsequent calls.
+              
+              led_on = true;
+            }
+            else if ( state == 0 && led_on ) {
+
+              // When status_led turns off, restore 
+              // the previous LED values.
+
+              auto call = id(status_led_light).make_call();
+              call.set_transition_length(0);
+              call.from_light_color_values(restore_values);
+              call.perform();
+
+              // Prevent further changes on subsequent calls.
+
+              led_on = false;
+            }

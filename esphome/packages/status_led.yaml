@@ -1,0 +1,13 @@
+# My template for the common, simple status LED.
+
+substitutions:
+  inverted_status_led: "true"
+
+light:
+  - platform: status_led
+    name: "Status LED"
+    id: status_led_light
+    entity_category: DIAGNOSTIC
+    pin:
+      number: ${pin_status_led}
+      inverted: ${inverted_status_led}

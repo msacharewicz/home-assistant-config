@@ -1,0 +1,56 @@
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+
+# Configuration
+substitutions:
+
+  name: "esp-shub-salon"
+  friendly_name: "Sensor Hub"
+
+  # Debug
+  hide_diagnostic_components: "false"
+
+  # Pinout
+  pin_sda:             6
+  pin_scl:             7
+  pin_status_led:      8
+  pin_uart_tx:         5
+  pin_uart_rx:         4
+  pin_presence:        0
+
+packages:
+  - !include packages/template.yaml
+  - !include packages/ld2420.yaml
+  - !include packages/status_led_ws2812.yaml
+
+# ============================================================================
+
+# I2C configuration
+
+i2c:
+  sda: ${pin_sda}
+  scl: ${pin_scl}
+  scan: true
+
+# AHT25 sensor for basic room environment monitoring
+
+sensor:
+
+  - platform: aht10
+    variant: AHT20 # Compatible with AHT25
+
+    temperature:
+      id: temperature
+      name: "Temperature"
+      accuracy_decimals: 1
+
+    humidity:
+      id: humidity
+      name: "Humidity"
+      accuracy_decimals: 1
+            
+    address: 0x38 # Default I2C AHT25 address
+    update_interval: 30s

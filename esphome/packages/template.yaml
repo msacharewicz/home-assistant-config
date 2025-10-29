@@ -1,0 +1,228 @@
+# My default template for all ESP boards.
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+  # Includes required libraries via a proxy header file
+
+  includes:
+    - packages/template.h 
+
+  # On boot, collect and parse board informartion
+  # from the ESP-IDF framework and store them
+  # in globals.
+
+  on_boot:
+  - priority: 900.0
+    then:
+      - lambda: |-
+
+          // Get the raw data on CPU speed.
+
+          uint32_t freq_hz = 0;
+          esp_clk_tree_src_get_freq_hz(SOC_MOD_CLK_CPU, ESP_CLK_TREE_SRC_FREQ_PRECISION_EXACT, &freq_hz);
+          id(cpu_speed) = freq_hz / 1000000;
+
+          // Get the raw data on total memory.
+
+          id(memory_total) = heap_caps_get_total_size(MALLOC_CAP_INTERNAL) / 1024;
+
+          // Get the raw chip data.
+
+          esp_chip_info_t info;
+          esp_chip_info(&info);
+
+          // Parse the info on the chip features (WiFi, BT etc.).
+          
+          std::string f;
+          if (info.features & CHIP_FEATURE_WIFI_BGN)    f += "WiFi ";
+          if (info.features & CHIP_FEATURE_BT)          f += "BT ";
+          if (info.features & CHIP_FEATURE_BLE)         f += "BLE ";
+          if (info.features & CHIP_FEATURE_IEEE802154)  f += "802.15.4 ";
+
+          id(esp_features) = f;
+
+          // Parse the info on the chip model (bare ESP32 or variants).
+
+          std::string model;
+          switch (info.model) {
+            case CHIP_ESP32: model = "ESP32"; break;
+            case CHIP_ESP32S2: model = "ESP32-S2"; break;
+            case CHIP_ESP32S3: model = "ESP32-S3"; break;
+            case CHIP_ESP32C2: model = "ESP32-C2"; break;
+            case CHIP_ESP32C3: model = "ESP32-C3"; break;
+            case CHIP_ESP32C5: model = "ESP32-C5"; break;
+            case CHIP_ESP32C6: model = "ESP32-C6"; break;
+            case CHIP_ESP32C61: model = "ESP32-C61"; break;
+            case CHIP_ESP32H2: model = "ESP32-H2"; break;
+            //case CHIP_ESP32H21: model = "ESP32-H21"; break;
+            //case CHIP_ESP32H4: model = "ESP32-H4"; break;
+            case CHIP_ESP32P4: model = "ESP32-P4"; break;
+            default: model = "Unknown"; break;
+          }
+
+          id(esp_model) = model;
+
+          // Parse the "xyz" revision data into a "x.yz" string.
+
+          uint16_t major = info.revision / 100;
+          uint16_t minor = info.revision % 100;
+
+          id(esp_revision) = str_sprintf("%d.%02d", major, minor);
+
+# Set the API key and OTA password from secrets.yaml
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    id: ota_password
+    password: !secret ota_password
+
+# Set the default WiFi configuration, including
+# the fallback hotspot for reprovisioning in case
+# our WiFi configuration dramatically changes.
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${name}
+    password: !secret wifi_password
+
+captive_portal:
+
+# Enable the blutetooth proxy for Home Assistant.
+# The more the merrier.
+
+bluetooth_proxy:
+
+# Enable logging and debug.
+
+logger:
+debug:
+
+# Globals for storing the data read and parsed on boot.
+
+globals:
+  - id: esp_features
+    type: std::string
+    restore_value: no
+  - id: esp_model
+    type: std::string
+    restore_value: no
+  - id: esp_revision
+    type: std::string
+    restore_value: no
+  - id: cpu_speed
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: memory_total
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+text_sensor:
+
+  # HA outputs for parsed board info.
+
+  - platform: template
+    name: "Board model"
+    icon: mdi:chip
+    entity_category: DIAGNOSTIC
+    lambda: return (id(esp_model));
+
+  - platform: template
+    name: "Board features"
+    icon: mdi:chip
+    entity_category: DIAGNOSTIC
+    lambda: return (id(esp_features));
+
+  - platform: template
+    name: "Board revision"
+    icon: mdi:chip
+    entity_category: DIAGNOSTIC
+    lambda: return (id(esp_revision));
+
+  # Registered reason for last reset.
+
+  - platform: debug
+    reset_reason:
+      name: "Reset reason"
+
+button:
+
+  - platform: restart
+    name: "Restart ESP"
+    entity_category: DIAGNOSTIC
+
+sensor:
+
+  # Report the WiFi connection parameters as RRSI...
+
+  - platform: wifi_signal
+    name: "WiFi signal [dB]"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: DIAGNOSTIC
+
+  # ...and as more user-friendly interpretation in %.
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi signal [%]"
+    icon: mdi:signal-cellular-3
+    filters:
+      - lambda: return max(min((x+90.0)/60.0,1.0),0.0)*100;
+    unit_of_measurement: "%"
+    entity_category: DIAGNOSTIC
+
+  # Board uptime and internal temperature.
+
+  - platform: uptime
+    id: sys_esp_uptime
+    name: "Uptime"
+    entity_category: DIAGNOSTIC
+
+  - platform: internal_temperature
+    id: sys_esp_temperature
+    name: "Board temperature"
+    state_class: MEASUREMENT
+    entity_category: DIAGNOSTIC
+
+  # Board data gathered during boot, presented
+  # as diagnostic sensors.
+
+  - platform: template
+    id: sys_esp_cpu_speed
+    name: "Board speed"
+    icon: mdi:chip
+    accuracy_decimals: 0
+    unit_of_measurement: Mhz
+    lambda: |-
+      return (id(cpu_speed));
+    entity_category: DIAGNOSTIC
+
+  - platform: template
+    id: sys_esp_memory_used
+    icon: mdi:memory
+    name: "Memory used"
+    lambda: return ( 100 * ( id(memory_total) - ( heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024 ) ) / id(memory_total) );
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    state_class: MEASUREMENT
+    entity_category: DIAGNOSTIC
+
+  - platform: template
+    id: sys_esp_memory_total
+    icon: mdi:memory
+    name: "Memory installed"
+    lambda: return (id(memory_total));
+    unit_of_measurement: "kB"
+    accuracy_decimals: 0
+    state_class: MEASUREMENT
+    entity_category: DIAGNOSTIC

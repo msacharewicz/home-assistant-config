@@ -1,0 +1,725 @@
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: ESP32S3
+  framework:
+    type: esp-idf
+
+# Configuration
+substitutions:
+
+  name: "esp-maan-hub-v2"
+  friendly_name: "MAAN Vertical G 60SA Kitchen Hub"
+
+  # Hub automation
+  update_interval:              4 # seconds
+  detection_threshold:         10 # seconds
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+  # Pinout
+  pin_sda:             8
+  pin_scl:             9
+  pin_status_led:      21
+
+  # Kitchen hub pinout along with the original plug documentation:
+  # All plug pins number are ordered starting from the left when
+  # looking at the plug with cables behind and with the
+  # latching lever on top: [..]
+
+  # Lamp powering plugs, N at plug pin 2
+  pin_relay_lamp:      1    # --> SSR CH1 --> lamp plugs, L to pin 1
+
+  # Fan powering plug, N at plug pin 1
+  pin_relay_speed_1:   2    # --> SSR CH2 --> fan plug, L to pin 2
+  pin_relay_speed_2:   3    # --> SSR CH3 --> fan plug, L to pin 3
+  pin_relay_speed_3:   4    # --> SSR CH4 --> fan plug, L to pin 4
+
+  # Hub control panel, 3V3 at plug pin 2
+  pin_button_lamp:     13   # <-- panel plug, pin 1
+  pin_button_speed_1:  12   # <-- panel plug, pin 3
+  pin_button_speed_2:  11   # <-- panel plug, pin 4
+  pin_button_speed_3:  10   # <-- panel plug, pin 5
+
+packages:
+  - !include packages/template.yaml
+  - !include packages/status_led.yaml
+
+# ============================================================================
+
+# I2C configuration
+
+i2c:
+  sda: ${pin_sda}
+  scl: ${pin_scl}
+  scan: true
+
+# Temperature and humidity sensors and their copies
+# with different filtering and display options.
+# Primarily used for optional fan automation.
+
+sensor:
+
+  # Base AHT25 sensor with raw, unfiltered data. Internal only.
+
+  - platform: aht10
+    variant: AHT20 # Compatible with AHT25
+    id: aht10_sensor
+
+    temperature:
+      id: temperature_source
+      name: "Temperature (source)"
+      internal: true
+      entity_category: DIAGNOSTIC
+      accuracy_decimals: 1
+
+    humidity:
+      id: humidity_source
+      name: "Humidity (source)"
+      internal: true
+      entity_category: DIAGNOSTIC
+      accuracy_decimals: 1
+            
+    address: 0x38 # Default I2C AHT25 address
+    update_interval: ${update_interval}s
+
+  # Short-term window filtering of AHT25 values
+
+  - platform: copy
+    source_id: temperature_source
+    name: "Temperature (short)"
+    id: temperature_short
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+    filters:
+      - skip_initial: &short_skip_initial   5  # <-- Configure here
+      - sliding_window_moving_average:
+          window_size: &short_window_size   8  # <-- Configure here
+          send_every: &short_send_every     2  # <-- Configure here
+
+  - platform: copy
+    source_id: humidity_source
+    name: "Humidity (short)"
+    id: humidity_short
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+    filters:
+      - skip_initial: *short_skip_initial
+      - sliding_window_moving_average:
+          window_size: *short_window_size
+          send_every: *short_send_every
+
+  - platform: absolute_humidity
+    humidity: humidity_short
+    temperature: temperature_short
+    name: "Abs. humidity (short)"
+    id: abs_humidity_short
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+
+  # Long-term window filtering of AHT25 values
+
+  - platform: copy
+    source_id: temperature_source
+    name: "Temperature (long)"
+    id: temperature_long
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+    filters:
+      - skip_initial: &long_skip_initial   5  # <-- Configure here
+      - sliding_window_moving_average:
+          window_size: &long_window_size  30  # <-- Configure here
+          send_every: &long_send_every     5  # <-- Configure here
+
+  - platform: copy
+    source_id: humidity_source
+    name: "Humidity (long)"
+    id: humidity_long
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+    filters:
+      - skip_initial: *long_skip_initial
+      - sliding_window_moving_average:
+          window_size: *long_window_size
+          send_every: *long_send_every
+
+  - platform: absolute_humidity
+    humidity: humidity_long
+    temperature: temperature_long
+    name: "Abs. humidity (long)"
+    id: abs_humidity_long
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+    accuracy_decimals: 1
+
+  # Temperature and humidity sensors for dashboard
+
+  - platform: template
+    id: temperature
+    name: "Temperature"
+    lambda: |-
+      return id(temperature_short).state;
+    update_interval: 60s
+    accuracy_decimals: 1
+    device_class: temperature
+    state_class: MEASUREMENT
+    unit_of_measurement: "°C"
+
+  - platform: template
+    id: humidity
+    name: "Humidity"
+    lambda: |-
+      return id(humidity_short).state;
+    update_interval: 60s
+    accuracy_decimals: 1
+    device_class: humidity
+    state_class: MEASUREMENT
+    unit_of_measurement: "%"
+
+
+# Hub lamp circuit connected to SSR CH1
+
+output:
+  - platform: gpio
+    pin: ${pin_relay_lamp}
+    id: relay_lamp
+
+# Hub lamps, controlled directly via relay.
+
+light:
+  - platform: binary
+    output: relay_lamp
+    name: "Lamp"
+    id: hub_lamp
+    restore_mode: RESTORE_DEFAULT_OFF
+
+
+# Fan as template, with speed controlled via 3 relays
+# proxied by switch components.
+
+fan:
+  - platform: template
+    name: "Fan"
+    id: hub_fan
+    speed_count: 3
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    # A preset mode "Auto" will maintain the state and speed
+    # of the fan automatically based on the AHT25 sensor.
+
+    preset_modes:
+      - Auto 
+    
+    on_turn_on:
+      - lambda: |-
+
+          // Default speed to one (not sure if necessary)
+
+          auto speed = id(hub_fan).speed ?: 1;
+
+          // Turn on selected speed switch. 
+          // Turning off other switches is maintained 
+          // by an interlock defined at the switch level.
+
+          switch (speed) {
+            case 1:
+              id(relay_speed_1).turn_on();
+              break;
+            case 2:
+              id(relay_speed_2).turn_on();
+              break;
+            case 3:
+              id(relay_speed_3).turn_on();
+              break;
+          }
+
+    on_turn_off:
+      - switch.turn_off: relay_speed_1
+      - switch.turn_off: relay_speed_2
+      - switch.turn_off: relay_speed_3
+      
+    on_speed_set:
+      - lambda: |-
+
+          // Ignore if fan is turned off
+
+          if (id(hub_fan).state == false) return;
+
+          // Otherwise turn on selected speed switch. 
+          // Turning off other switches is maintained 
+          // by an interlock defined at the switch level.
+
+          switch (x) {
+            case 1:
+              id(relay_speed_1).turn_on();
+              break;
+            case 2:
+              id(relay_speed_2).turn_on();
+              break;
+            case 3:
+              id(relay_speed_3).turn_on();
+              break;
+          }
+
+
+switch:
+
+  # Relay switches control the motor power supply circuits directly.
+  # They need to emulate original buttons mechanical interlock to prevent
+  # power being feeded to more than one circuit at the time.
+  # Though mind that upon checking, the original mechanical interlock
+  # actually powers the new circuit a tiny moment before disconnecting
+  # the old one, and as such, a very short interlock delay is kept,
+  # not sure if necessary.
+
+  # Relay for motor power supply circuit 1: low speed
+  - platform: gpio
+    id: relay_speed_1
+    pin: ${pin_relay_speed_1}
+    interlock: &relay_interlock_group [relay_speed_1,relay_speed_2,relay_speed_3]   # <-- Configure here
+    interlock_wait_time: &relay_interlock_delay 20ms                                # <-- Configure here
+    restore_mode: ALWAYS_OFF
+    internal: true
+    entity_category: DIAGNOSTIC            
+
+  # Relay for motor power supply circuit 2: medium speed
+  - platform: gpio
+    id: relay_speed_2
+    pin: ${pin_relay_speed_2}
+    interlock: *relay_interlock_group
+    interlock_wait_time: *relay_interlock_delay
+    restore_mode: ALWAYS_OFF
+    internal: true
+    entity_category: DIAGNOSTIC
+
+  # Relay for motor power supply circuit 3: high speed
+  - platform: gpio
+    id: relay_speed_3
+    pin: ${pin_relay_speed_3}
+    interlock: *relay_interlock_group
+    interlock_wait_time: *relay_interlock_delay
+    restore_mode: ALWAYS_OFF
+    internal: true
+    entity_category: DIAGNOSTIC
+
+
+# Fan configuration parameters for automation algorithm
+
+number:
+
+  # AHT25 raw sensor polling interval.
+  # Mind this was implemented more like a stopgap test
+  # and doesn't work well as it doesn't scale the filtering
+  # windows on long and short term sensor proxies.
+
+  - platform: template
+    name: "Polling interval [s]"
+    #icon: "mdi:timer"
+    id: polling_interval
+    device_class: duration
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 4
+    unit_of_measurement: "s"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+    on_value:
+      - lambda: |-
+          id(aht10_sensor).set_update_interval(uint32_t(x)*1000);
+          id(aht10_sensor).call_setup();
+
+
+  # A period of persistance between fan state and speed changes.
+  # This is a base value, some waiting windows use it directly
+  # while others use a multiplication of this value.
+
+  - platform: template
+    name: "Speed persistence time [s]"
+    #icon: "mdi:timer"
+    id: persistence_time
+    device_class: duration
+    min_value: 1
+    max_value: 60
+    step: 1
+    initial_value: 10
+    unit_of_measurement: "s"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+
+  # A threshold for intial cooking detection, defined as
+  # a % difference of short term humidity value above 
+  # the long term value. Using absolute humidity as it
+  # corrects for temperature drop that occurs when 
+  # the fans are started.
+
+  - platform: template
+    name: "Abs. humidity bias threshold [%]"
+    #icon: "mdi:thermometer"
+    id: humidity_bias
+    device_class: humidity
+    min_value: 1
+    max_value: 30
+    step: 1
+    initial_value: 10
+    unit_of_measurement: "%"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+
+
+# Fan automation algorithm. I have to remember
+# I am not an HVAC engineer and I shouldn't judge
+# myself too harshly for this implementation.
+# Well, it works. Sort of. Could be better.
+
+interval:
+  - interval: ${update_interval}s
+    id: fan_auto_mode
+    startup_delay: 30s # I had some reason for it, but forgot to document.
+    then:
+      - lambda: |-
+          
+          // Run only when Auto preset is on.
+
+          if (id(hub_fan).preset_mode != "Auto") return;
+
+          // Get the sensor values. Those that I need and those that I don't need too.
+          // One day they might get handy... ^_^
+
+          float h_long  = id(abs_humidity_long).state;
+          float h_short = id(abs_humidity_short).state;
+          float t_long  = id(temperature_long).state;
+          float t_short = id(temperature_short).state;
+
+          // Get the config values.
+
+          int interval      = id(polling_interval).state;   // [s]econds
+          int persistence   = id(persistence_time).state;   // [s]econds
+          float bias        = id(humidity_bias).state/100;  // [0..1] recalculated from %
+
+          // Get current speed and use it as desired until we change our mind.
+
+          int current = id(hub_fan).state ? id(hub_fan).speed : 0;
+          int desired = current;
+
+          // Keep track of when we are in time, what the current algorithm state is etc.
+
+          static int state_time = 0;
+          static std::string state = "standby";
+          std::string new_state;
+
+          // Keep track of initial and maximum humidity values recorded for current cooking time.
+
+          static float h_init = 0;
+          static float h_max = 0;
+          
+          // Guess what's the state of humidity right now.
+
+          if ( h_short > h_long*(1+bias) ) {
+            new_state = "rising";
+          } else if ( h_short < h_long*(1-bias/2) ) {
+            new_state = "dropping";
+          } else {
+            new_state = "flat";
+          }
+
+          // If state has changed, reset the timer.
+          // Also, use this moment to keep the initial/maximum humidity 
+          // values aligned with our cooking stage...
+
+          if ( state != new_state ) {
+            state = new_state;
+            state_time = 0;
+            
+            if ( state == "rising" && h_init == 0 ) h_init = h_long;  // (the h_init gets zeroed at the end of the cooking phase)
+            if ( state != "rising" ) h_max = std::max(h_max,h_short);
+          }
+
+          // ...and if state has not changed, progress the time counter.
+
+          else {  
+            state_time += interval;
+          }
+
+          ESP_LOGD("Hub","State: %s, new_state: %s, state_time: %d, speed: %d, fan: %d",state.c_str(),new_state.c_str(),state_time,current,id(hub_fan).state);
+
+          // Standby Phase - when the fan is off, we're waiting 
+          // and trying to detect if someone is cooking.
+          
+          if ( id(hub_fan).state == false ) {
+
+              // We'll guess someone's cooking, when the humidity 
+              // keeps rapidly rising for a sufficient long time.
+              // Then we request the fan being set to [1] and reset
+              // the state timer, so that we know how long it rises
+              // further on.
+
+              if ( state == "rising" && state_time > persistence) {
+                desired = 1;
+                state_time = 0;
+              }
+          }
+
+          // Cooking Phase - when we turned the fan on and are trying
+          // to adjust the fan speed or turn it off when cooking is done.
+
+          else {
+
+              // If the humidity keeps rising or dropping, adjust the speed.
+
+              if ( state == "rising" && state_time > 4*persistence) {
+                state_time = 0;
+                if ( desired < 3 ) desired++;
+              }
+              else if ( state == "dropping" && state_time > persistence ) {
+                state_time = 0;
+                if ( desired > 1 ) desired--;
+              }
+
+              // If the humidity gets stagnant, slowly drop the speed...
+
+              else if ( state == "flat" && state_time > 2*persistence && current > 1 ) {
+                state_time = 0;
+                desired--;
+              }
+
+              // ...and shut down the fan when humidity drops halfway between
+              // what it was before cooking and what it was at it's max.
+
+              else if ( ( state == "flat" || state == "dropping" ) && state_time > 2*persistence && h_short <= (h_max+h_init)/2 ) {
+                state_time = 0;
+                desired = 0;
+              }
+          }
+
+          // If a new desired speed was requested, change it now.
+
+          if (desired != current) {
+
+            // Turn the lamp on, helpful when cooking.
+
+            auto call1 = id(hub_lamp).make_call();
+            call1.set_state(true);
+            call1.perform();
+
+            // Change the speed as desired.
+
+            auto call2 = id(hub_fan).make_call();
+            call2.set_speed(desired);
+            call2.set_state(desired > 0);
+            call2.perform();
+
+            // Restore the "Auto" preset as it drops on fan state changes.
+            // It's OK when user does it himself, but when automation does it,
+            // we want to keep automation alive.
+
+            auto call3 = id(hub_fan).make_call();
+            call3.set_preset_mode("Auto");
+            call3.perform();
+
+            // As promised, we zero the h_max/h_init at the end
+            // of our cooking phase.
+            
+            if (desired == 0) {
+              h_max = 0;
+              h_init = 0;
+            }
+          }
+
+          return;
+
+
+# Hub panel physical buttons.
+
+binary_sensor:
+
+  # Speed 0
+  # This button is implemented virtually, as it is not connected
+  # to the panel plug, and it's just tripping all the other
+  # speed buttons OFF via mechanical interlock.
+
+  - platform: template
+    name: "Button state: Speed 0"
+    icon: "mdi:numeric-0-circle-outline"
+    id: input_btn_speed_0
+    lambda: |-
+      // The button is ON when all the other speed buttons got OFF.
+      return !(id(input_btn_speed_1).state || id(input_btn_speed_2).state || id(input_btn_speed_3).state);
+    on_press:
+      - button.press: btn_speed_0 # press corresponding virtual button
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+  
+  # Speeds 1-3
+  # Since virtual buttons were implemented during testing, I kept
+  # using them as a proxy for actual motor/relay actions as it 
+  # looked cleaner that way.
+
+  # Speed 1
+  - platform: gpio
+    pin:
+      number: ${pin_button_speed_1}
+      mode: INPUT_PULLDOWN
+    name: "Button state: Speed 1"
+    icon: "mdi:numeric-1-circle-outline"
+    id: input_btn_speed_1
+    on_press:
+      - button.press: btn_speed_1 # press corresponding virtual button
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 2
+  - platform: gpio
+    pin:
+      number: ${pin_button_speed_2}
+      mode: INPUT_PULLDOWN
+    name: "Button state: Speed 2"
+    icon: "mdi:numeric-2-circle-outline"
+    id: input_btn_speed_2
+    on_press:
+      - button.press: btn_speed_2 # press corresponding virtual button
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 3
+  - platform: gpio
+    pin:
+      number: ${pin_button_speed_3}
+      mode: INPUT_PULLDOWN
+    name: "Button state: Speed 3"
+    icon: "mdi:numeric-3-circle-outline"
+    id: input_btn_speed_3
+    on_press:
+      - button.press: btn_speed_3 # press corresponding virtual button
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Light button - controls light directly
+  - platform: gpio
+    pin:
+      number: ${pin_button_lamp}
+      mode: INPUT_PULLDOWN
+    name: "Button state: Lamp"
+    icon: "mdi:asterisk-circle-outline"
+    on_press:
+      - light.turn_on: hub_lamp 
+    on_release:
+      - light.turn_off: hub_lamp 
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Sensors that expose the state of the realy switches for debug
+  # while not allowing user to switch the relays on manually.
+
+  # Speed 1 relay status
+  - platform: switch
+    name: "Relay state: Speed 1"
+    icon: "mdi:electric-switch"
+    id: relay_debug_speed_1
+    source_id: relay_speed_1
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 2 relay status
+  - platform: switch
+    name: "Relay state: Speed 2"
+    icon: "mdi:electric-switch"
+    id: relay_debug_speed_2
+    source_id: relay_speed_2
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 3 relay status
+  - platform: switch
+    name: "Relay state: Speed 3"
+    icon: "mdi:electric-switch"
+    id: relay_debug_speed_3
+    source_id: relay_speed_3
+    #internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+button:
+
+  # Virtualized speed buttons that were implemented
+  # during dry testing, but are kept and are proxying
+  # between the physical buttons and the actual actions.
+
+  # Speed 0
+  - platform: template
+    name: "Button Speed 0"
+    icon: "mdi:numeric-0-circle-outline"
+    id: btn_speed_0
+    on_press:
+      - lambda: |-
+          // Turn off the fan
+          auto call = id(hub_fan).make_call();
+          call.set_state(false);
+          call.perform();
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 1
+  - platform: template
+    name: "Button: Speed 1"
+    icon: "mdi:numeric-1-circle-outline"
+    id: btn_speed_1
+    on_press:
+      - lambda: |-
+          // Turn on the fan and set the desired speed
+          auto call = id(hub_fan).make_call();
+          call.set_speed(1);
+          call.set_state(true);
+          call.perform();
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 2
+  - platform: template
+    name: "Button: Speed 2"
+    icon: "mdi:numeric-2-circle-outline"
+    id: btn_speed_2
+    on_press:
+      - lambda: |-
+          // Turn on the fan and set the desired speed
+          auto call = id(hub_fan).make_call();
+          call.set_speed(2);
+          call.set_state(true);
+          call.perform();
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Speed 3
+  - platform: template
+    name: "Button: Speed 3"
+    icon: "mdi:numeric-3-circle-outline"
+    id: btn_speed_3
+    on_press:
+      - lambda: |-
+          // Turn on the fan and set the desired speed
+          auto call = id(hub_fan).make_call();
+          call.set_speed(3);
+          call.set_state(true);
+          call.perform();
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC
+
+  # Virtualized kitchen hub lamp button serves
+  # no production role and is used only for debug.
+
+  # Lamp
+  - platform: template
+    name: "Button: Lamp"
+    icon: "mdi:asterisk-circle-outline"
+    id: btn_light
+    on_press:
+      - light.toggle: hub_lamp
+    internal: ${hide_diagnostic_components}
+    entity_category: DIAGNOSTIC

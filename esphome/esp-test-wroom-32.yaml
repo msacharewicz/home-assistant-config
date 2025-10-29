@@ -1,0 +1,26 @@
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Configuration
+substitutions:
+
+  name: "esp-test-wroom-32"
+  friendly_name: "Poligon"
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+  # Pinout
+  pin_sda:             21
+  pin_scl:             22
+  pin_status_led:      2
+  
+  inverted_status_led: "false"
+
+packages:
+  - !include packages/template.yaml
+  - !include packages/status_led.yaml
+
+# ============================================================================

@@ -1,0 +1,3 @@
+# Ignore default HA templates
+/motion_light.yaml
+/notify_leaving_zone.yaml

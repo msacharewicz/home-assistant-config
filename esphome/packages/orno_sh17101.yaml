@@ -1,0 +1,70 @@
+
+# Template for ORNO OR-SH-17101 Tuya 2CH WiFi relay.
+
+substitutions:
+
+  # Factory connections
+
+  pin_relay_L1:     P28
+  pin_relay_L2:     P9
+  pin_input_S1:     P6
+  pin_input_S2:     P26
+  pin_button_cover: P8
+
+binary_sensor:
+  
+  # Sensors on S1 and S2 inputs that connect L through
+  # the wall switch. They toggle the relays upon flipping
+  # the wall switch manually.
+
+  - platform: gpio
+    id: input_S1
+    pin:
+      number: ${pin_input_S1}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_state:
+      then:
+        - switch.toggle: relay_L1
+
+  - platform: gpio
+    id: input_S2
+    pin:
+      number: ${pin_input_S2}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_state:
+      then:
+        - switch.toggle: relay_L2
+
+  # Sensor for the button on the cover. Not really used,
+  # but I copied the default functionality.
+
+  - platform: gpio
+    id: button_cover
+    pin:
+      number: ${pin_button_cover}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_press:
+      then:
+        - switch.toggle: relay_L1
+        - switch.toggle: relay_L2
+
+switch:
+  
+  # Relays for L1 and L2 outputs.
+
+  - platform: gpio
+    id: relay_L1
+    name: "Relay L1"
+    pin: ${pin_relay_L1}
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  - platform: gpio
+    id: relay_L2
+    name: "Relay L2"
+    pin: ${pin_relay_L2}
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    

@@ -1,0 +1,93 @@
+
+blueprint:
+  name: Sync HA<->ST (fan)
+  description: Synchronize on/off state between Home Assistant and SmartThings fans.
+  domain: automation
+  input:
+    ha_device_input:
+      name: Home Assistant
+      selector:
+        entity:
+          filter:
+            domain:
+              - fan
+    st_device_input:
+      name: SmartThings
+      selector:
+        entity:
+          filter:
+            integration: smartthings
+            domain: light
+
+alias: Sync HA<->ST Wiatrak
+description: ""
+triggers:
+  - trigger: state
+    entity_id: !input ha_device_input
+    id: ha
+  - trigger: state
+    entity_id: !input st_device_input
+    id: st
+  - trigger: state
+    entity_id: !input ha_device_input
+    attribute: speed
+    id: ha
+  - trigger: state
+    entity_id: !input st_device_input
+    attribute: brightness
+    id: st
+actions:
+  - variables:
+      ha_device: !input ha_device_input
+      st_device: !input st_device_input
+      ha_speed: "{{ state_attr(ha_device, 'percentage') }}"
+      st_speed: >-
+        {{ ((( 0 if state_attr(st_device, 'brightness') == None else
+        state_attr(st_device, 'brightness') ) - 1) / 254 * 100) |
+        round(0) }}
+      source_device: "{{ ha_device if trigger.id == 'ha' else st_device }}"
+      target_device: "{{ st_device if trigger.id == 'ha' else ha_device }}"
+      source_state: "{{ states(source_device) }}"
+      target_state: "{{ states(target_device) }}"
+      source_speed: "{{ ha_speed if trigger.id == 'ha' else st_speed }}"
+      target_speed: "{{ st_speed if trigger.id == 'ha' else ha_speed }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ source_state != target_state and source_state in ['on', 'off']
+              }}
+        sequence:
+          - target:
+              entity_id: "{{ target_device }}"
+            action: homeassistant.turn_{{ source_state }}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ source_speed != target_speed and source_state in ['on'] }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ source_device == st_device }}"
+                sequence:
+                  - action: fan.set_percentage
+                    target:
+                      entity_id: "{{ ha_device }}"
+                    data:
+                      percentage: "{{ source_speed }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ source_device == ha_device }}"
+                sequence:
+                  - action: light.turn_on
+                    target:
+                      entity_id: "{{ st_device }}"
+                    data:
+                      brightness: "{{ (( source_speed / 100) * 254 + 1) | round(0) }}"
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 2
+      milliseconds: 0
+mode: single

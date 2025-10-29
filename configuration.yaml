@@ -1,0 +1,86 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+logger:
+  default: warning
+  logs:
+    tuya_sharing: debug
+
+#system_log:
+#  fire_event: true
+#  max_entries: 500
+
+# TLS with letsencrypt add-on
+
+http:
+  server_port: 443
+  ssl_certificate: /ssl/fullchain.pem
+  ssl_key: /ssl/privkey.pem
+
+# Adding often-used configuration panels to sidebar
+
+panel_custom:
+
+  # Automations panel
+
+  - name: Automations
+    sidebar_title: Automations
+    sidebar_icon: mdi:robot
+    js_url: /api/hassio/app/entrypoint.js
+    url_path: config/automation/dashboard
+    embed_iframe: true
+    require_admin: true
+    config:
+      ingress: core_configurator
+
+  # Devices panel
+
+  - name: Devices
+    sidebar_title: Devices
+    sidebar_icon: mdi:devices
+    js_url: /api/hassio/app/entrypoint.js
+    url_path: config/devices/dashboard
+    embed_iframe: true
+    require_admin: true
+    config:
+      ingress: core_configurator
+
+command_line:
+
+  # Checks the Tuya integration logs for PINGRESPonds to verify connection.
+  # This is to address the issues with connections failing upon accessToken renewal.
+  # See: https://github.com/home-assistant/core/issues/154841
+  # Requires logging of "tuya_sharing: debug"
+
+  - binary_sensor:
+      name: "Tuya: Stan połączenia"
+      unique_id: tuya_connection_active
+      device_class: connectivity
+      scan_interval: 60
+      
+      # Finds the last PINGRESP line
+      command: 'grep "Received PINGRESP" /config/home-assistant.log | tail -1'
+
+      # Sensor available if at least one PINGRESP line present
+      availability: "{{ value is not none and value | length > 0 }}"
+      
+      # Value is ON if the last timestamp is less than 5 minutes old
+      value_template: >-
+        {% set dt_full = value | default('') | string %}
+        {% set dt_str = dt_full | truncate(19, True, '') %}
+        {% set last_ping = as_datetime(dt_str) %}
+        {% set is_active = false %}
+        {% if last_ping is not none %}
+          {% set last_ping_local = last_ping | as_local %}
+          {% set threshold = now() - timedelta(minutes=1) %}
+          {% set is_active = last_ping_local is not none and last_ping_local > threshold %}
+        {% endif %}
+        {{ 'ON' if is_active else 'OFF' }}

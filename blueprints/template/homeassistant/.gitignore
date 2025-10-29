@@ -1,0 +1,2 @@
+# Ignore default HA templates
+/inverted_binary_sensor.yaml

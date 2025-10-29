@@ -1,0 +1,49 @@
+blueprint:
+  name: Sync HA<->ST
+  description: Synchronize on/off state between Home Assistant and SmartThings switches.
+  domain: automation
+  input:
+    ha_device_input:
+      name: Home Assistant
+      selector:
+        entity:
+          filter:
+            domain:
+              - light
+              - switch
+    st_device_input:
+      name: SmartThings
+      selector:
+        entity:
+          filter:
+            integration: smartthings
+            domain: switch
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input ha_device_input
+    id: ha
+  - trigger: state
+    entity_id: !input st_device_input
+    id: st
+
+actions:
+  - variables:
+      ha_device: !input ha_device_input
+      st_device: !input st_device_input
+      source_device: "{{ ha_device if trigger.id == 'ha' else st_device }}"
+      target_device: "{{ st_device if trigger.id == 'ha' else ha_device }}"
+      source_state: "{{ states(source_device) }}"
+      target_state: "{{ states(target_device) }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ source_state != target_state and source_state in ['on', 'off'] 
+              }}
+        sequence:
+          - target:
+              entity_id: "{{ target_device }}"
+            action: homeassistant.turn_{{ source_state }}

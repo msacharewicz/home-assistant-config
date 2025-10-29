@@ -1,0 +1,277 @@
+# UART for LD2420
+
+uart:
+
+  id: uart_ld2420
+  tx_pin: ${pin_uart_tx}
+  rx_pin: ${pin_uart_rx}
+  baud_rate: 115200
+  parity: NONE
+  stop_bits: 1
+
+substitutions:
+
+  - led_color: &led_color
+      red: 100%
+      green: 71%
+      blue: 42%
+
+# The component
+
+ld2420:
+
+  uart_id: uart_ld2420
+
+# Additional logic for missing "motion detected" sensor output.
+# We have an internal switch that stores the current state:
+
+switch:
+
+  - platform: template
+    internal: true
+    restore_mode: ALWAYS_OFF
+    id: motion_detected
+    optimistic: true
+
+# We have a platform-defined "moving distance" sensor that
+# updates value whenever it senses movement. As such, when
+# it updates value, we know some movement happened.
+# We then turn on the motion_detected sensor and launch
+# a script that would turn it off after configured timeout:
+
+sensor:
+
+  - platform: ld2420
+    moving_distance:
+      name : "Moving distance"
+      on_value:
+        - switch.turn_on: motion_detected
+        - script.execute: motion_timer
+
+# The script is in a "restart" mode, which means that
+# if the moving_distance sensor updates before the configured
+# delay, the script will end prematurely and a new instance
+# will launch, thus delaying the turn off even further:
+
+script:
+
+  - id: motion_timer
+    mode: restart
+    then:
+      - delay: !lambda return id(motion_timeout).state * 1000;
+      - switch.turn_off: motion_detected
+
+# On boot, the state of the presence and motion binary sensors
+# may be on before it can trigger the LED, so we fix it during
+# the very late stage of the boot up.
+
+esphome:
+  on_boot:
+    - priority: -800.0
+      then:
+        - if:
+            condition:
+              binary_sensor.is_on: presence
+            then:
+              light.turn_on: 
+                id: status_led_light
+                brightness: !lambda return id(presence_brightness).state/100;
+                transition_length: !lambda return int(min(1000*id(motion_timeout).state/2.0,10000.0));
+                <<: *led_color
+        - if:
+            condition:
+              binary_sensor.is_on: motion
+            then:
+              light.turn_on: 
+                id: status_led_light
+                brightness: !lambda return id(motion_brightness).state/100;
+                transition_length: !lambda return int(min(1000*id(motion_timeout).state/2.0,10000.0));
+                <<: *led_color
+
+binary_sensor:
+
+  # The platform-defined presence sensor that additionally
+  # triggers the status LED into a "presence" setting.
+
+  - platform: ld2420
+    has_target:
+      name: "Presence"
+      id: presence
+      on_press: 
+        light.turn_on: 
+          id: status_led_light
+          brightness: !lambda return id(presence_brightness).state/100;
+          transition_length: 0s
+          <<: *led_color
+      on_release:
+        light.turn_off:
+          id: status_led_light
+
+  # The virtual motion sensor that proxies the earlier defined
+  # switch into a user-available sensor. It also triggers
+  # the status LED into a "motion" setting.
+
+  - platform: switch
+    source_id: motion_detected
+    device_class: motion
+    name: "Motion"
+    id: motion
+    on_press:
+      light.turn_on: 
+        id: status_led_light
+        brightness: !lambda return id(motion_brightness).state/100;
+        transition_length: !lambda return int(min(1000*id(motion_timeout).state/10.0,500.0));
+        <<: *led_color
+    on_release:
+      if:
+        condition:
+          binary_sensor.is_on: presence
+        then:
+          light.turn_on: 
+            id: status_led_light
+            brightness: !lambda return id(presence_brightness).state/100; // ${brightness_presence}
+            transition_length: !lambda return int(min(1000*id(motion_timeout).state/2.0,10000.0));
+            <<: *led_color
+        else:
+          light.turn_off: status_led_light
+
+  # LD2420 has additional pin that reports the presence.
+  # Not much use to us, but included anyways.
+
+  - platform: gpio
+    name: "Presence (gpio)"
+    internal: true
+    pin:
+      number: ${pin_presence}
+      mode: INPUT_PULLDOWN
+
+# All that follows are a mix of platform-defined (mandatory) 
+# and our own config preferences.
+
+select:
+
+  # Operating mode is used mainly for calibration. You leave
+  # the room, select the "Calibration" mode, wait at least
+  # 30 seconds for the sensor to do it's magic and measure
+  # all the noises, then click "Apply config" so that 
+  # the module flips into "Normal" mode saving calibration.
+
+  - platform: ld2420
+    operating_mode:
+      name: "Operating mode"
+
+number:
+
+  # Platform-default (and mandatory) parameters
+  # for fine-tuning.
+
+  - platform: ld2420
+    presence_timeout:
+      name: "Presence timeout"
+    min_gate_distance:
+      name: "Detection gate minimum"
+    max_gate_distance:
+      name: "Detection gate maximum"
+    gate_select:
+      name: "Select Gate to Set"
+    still_threshold:
+      name: "Set still threshold value"
+    move_threshold:
+      name: "Set move threshold value"
+
+  # Custom setting for defining the motion timeout.
+
+  - platform: template
+    id: motion_timeout
+    name: "Motion timeout"
+    icon: mdi:timelapse
+    device_class: duration
+    min_value: 1
+    max_value: 60
+    step: 0.5
+    initial_value: 10
+    unit_of_measurement: "s"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+
+  # Custom setting that defines the LED brightness
+  # when presence is detected.
+
+  - platform: template
+    id: presence_brightness
+    name: "Presence LED brightness"
+    icon: mdi:lightbulb-on-50
+    min_value: 1
+    max_value: 100
+    step: 10
+    initial_value: 30
+    unit_of_measurement: "%"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+    on_value:
+      if:
+        condition:
+          binary_sensor.is_on: presence
+        then:
+          light.control: 
+            id: status_led_light
+            brightness: !lambda return id(presence_brightness).state/100; // ${brightness_presence}
+            transition_length: 250ms
+            <<: *led_color
+
+  # Custom setting that defines the LED brightness
+  # when motion is detected.
+
+  - platform: template
+    id: motion_brightness
+    name: "Motion LED brightness"
+    icon: mdi:lightbulb-on-50
+    min_value: 1
+    max_value: 100
+    step: 10
+    initial_value: 100
+    unit_of_measurement: "%"
+    restore_value: true
+    optimistic: true
+    entity_category: CONFIG
+    on_value:
+      if:
+        condition:
+          binary_sensor.is_on: motion
+        then:
+          light.control: 
+            id: status_led_light
+            brightness: !lambda return id(motion_brightness).state/100; // ${brightness_presence}
+            transition_length: 250ms
+            <<: *led_color
+
+button:
+
+  # Platform-defined (and mandatory) buttons for managing
+  # the device and it's configuration.
+
+  - platform: ld2420
+    apply_config:
+      name: "Apply config"
+      icon: mdi:content-save
+    factory_reset:
+      name: "Reset config"
+      icon: mdi:content-save-off
+    restart_module:
+      device_class: restart
+      icon: mdi:restart
+      name: "Restart LD2420 sensor"
+    revert_config:
+      icon: mdi:undo-variant
+      name: "Undo edits"
+
+text_sensor:
+
+  # Platform-defined (and mandatory) text output
+  # with firmware version.
+
+  - platform: ld2420
+    fw_version:
+      name: "LD2420 firmware"

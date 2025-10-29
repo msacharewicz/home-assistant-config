@@ -1,0 +1,17 @@
+bk72xx:
+  board: cbu
+
+# Configuration
+substitutions:
+
+  name: "bk72-orno-salon"
+  friendly_name: "ORNO OR-SH-17101"
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+packages:
+  - !include packages/template_bk.yaml
+  - !include packages/orno_sh17101.yaml
+
+# ============================================================================
