@@ -16,7 +16,6 @@ substitutions:
 
   # Hub automation
   update_interval:              4 # seconds
-  detection_threshold:         10 # seconds
 
   # Debug
   hide_diagnostic_components: "true"
