@@ -1,0 +1,16 @@
+# Ignore everything:
+*
+!.gitignore
+
+# Except for the these directories:
+!esphome/
+!esphome/**
+!blueprints/
+!blueprints/**
+
+# And the main config file:
+!configuration.yaml
+
+# Keep docs and license in repo root
+!/README.md
+!/LICENSE
