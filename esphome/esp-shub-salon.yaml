@@ -1,3 +1,7 @@
+# Waveshare 30547 (ESP32-C6-DEV-KIT-N16-M)
+# https://www.espboards.dev/esp32/esp32-c6-devkitc-1/
+# https://www.waveshare.com/esp32-c6-dev-kit-n8.htm?sku=30547
+
 esp32:
   board: esp32-c6-devkitc-1
   variant: esp32c6

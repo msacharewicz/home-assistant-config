@@ -1,3 +1,8 @@
+# Tuya Beken CBU (BK7231N)
+# https://docs.libretiny.eu/boards/cbu/
+# Product: ORNO OR-SH-17101 2-channel relay Tuya Smart Wi-Fi+BLE
+# https://www.orno.pl/en/przekazniki-dopuszkowe/1624-2-channel-relay-tuya-smart-wi-fi-ble-5908254845062.html
+
 bk72xx:
   board: cbu
 

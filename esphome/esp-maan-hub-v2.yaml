@@ -1,3 +1,7 @@
+# Waveshare 25517 (ESP32-S3-Zero-M)
+# https://www.espboards.dev/esp32/esp32-s3-zero/
+# https://www.waveshare.com/esp32-s3-zero.htm
+
 esp32:
   board: esp32-s3-devkitc-1
   variant: ESP32S3

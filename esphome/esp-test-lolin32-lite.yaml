@@ -1,3 +1,6 @@
+# WEMOS Lolin32 Lite
+# https://www.espboards.dev/esp32/lolin32-lite/
+
 esp32:
   board: lolin32_lite
   framework:
