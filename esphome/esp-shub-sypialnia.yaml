@@ -23,7 +23,7 @@ substitutions:
   pin_status_led:      8
   pin_uart_tx:         5
   pin_uart_rx:         4
-  pin_presence:        15
+  pin_presence:        0
 
 packages:
   - !include packages/template.yaml
