@@ -86,11 +86,18 @@ text_sensor:
 
   # HA outputs for parsed board info.
 
-  # - platform: template
-  #   name: "Board model"
-  #   icon: mdi:chip
-  #   entity_category: DIAGNOSTIC
-  #   lambda: return (id(esp_model));
+  - platform: template
+    name: "Board model"
+    icon: mdi:chip
+    entity_category: DIAGNOSTIC
+    lambda: |-
+      std::string s = id(board_info).state;
+      auto pos1 = s.find("Chip Name:");
+      if (pos1 == std::string::npos) return {};
+      pos1 += 10; // skip "Chip Name:"
+      auto pos2 = s.find("|Chip ID:", pos1);
+      if (pos2 == std::string::npos) return s.substr(pos1);
+      return s.substr(pos1, pos2 - pos1);
 
   # - platform: template
   #   name: "Board features"
@@ -173,12 +180,19 @@ sensor:
   #   state_class: MEASUREMENT
   #   entity_category: DIAGNOSTIC
 
-  # - platform: template
-  #   id: sys_bk_memory_total
-  #   icon: mdi:memory
-  #   name: "Memory installed"
-  #   lambda: return (id(memory_total));
-  #   unit_of_measurement: "kB"
-  #   accuracy_decimals: 0
-  #   state_class: MEASUREMENT
-  #   entity_category: DIAGNOSTIC
+  - platform: template
+    id: sys_bk_memory_total
+    icon: mdi:memory
+    name: "Memory installed"
+    lambda: |-
+      std::string s = id(board_info).state;
+      auto pos1 = s.find("RAM: ");
+      if (pos1 == std::string::npos) return {};
+      pos1 += 5; // skip "RAM: "
+      auto pos2 = s.find(" KiB", pos1);
+      if (pos2 == std::string::npos) return {};
+      return std::stoi( s.substr(pos1, pos2 - pos1) );
+    unit_of_measurement: "kB"
+    accuracy_decimals: 0
+    state_class: MEASUREMENT
+    entity_category: DIAGNOSTIC
