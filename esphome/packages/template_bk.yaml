@@ -86,6 +86,11 @@ text_sensor:
 
   # HA outputs for parsed board info.
 
+  - platform: debug
+    device:
+      id: board_info
+      internal: true # Just for parsing by other sensors.
+
   - platform: template
     name: "Board model"
     icon: mdi:chip
