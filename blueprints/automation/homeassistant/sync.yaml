@@ -1,0 +1,57 @@
+blueprint:
+  name: Sync
+  description: Synchronize on/off state between two entities
+  domain: automation
+  input:
+    device_A:
+      name: "Entity A"
+      selector:
+        entity:
+          filter:
+            domain:
+              - light
+              - switch
+    device_B:
+      name: "Entity B"
+      selector:
+        entity:
+          filter:
+            domain:
+              - light
+              - switch
+
+mode: single
+
+# Triggered by state of any device, but keep track 
+# of which one initiated the change.
+
+triggers:
+  - trigger: state
+    entity_id: !input device_A
+    id: changed_by_A
+  - trigger: state
+    entity_id: !input device_B
+    id: changed_by_B
+
+actions:
+  - variables:
+
+      device_A: !input device_A
+      device_B: !input device_B
+      
+      # Select the source/target device and state
+      # using value of trigger id
+      source_device: "{{ device_A if trigger.id == 'changed_by_A' else device_B }}"
+      target_device: "{{ device_B if trigger.id == 'changed_by_A' else device_A }}"
+      source_state: "{{ states(source_device) }}"
+      target_state: "{{ states(target_device) }}"
+
+  - choose:
+    - conditions:
+        - condition: template
+          value_template: >-
+            {{ source_state != target_state and source_state in ['on', 'off'] }}
+      sequence:
+        - target:
+            entity_id: "{{ target_device }}"
+          action: homeassistant.turn_{{ source_state }}
