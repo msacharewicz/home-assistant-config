@@ -1,0 +1,33 @@
+# Waveshare 25517 (ESP32-S3-Zero-M)
+# https://www.espboards.dev/esp32/esp32-s3-zero/
+# https://www.waveshare.com/esp32-s3-zero.htm
+
+esp32:
+  board: esp32-s3-devkitc-1
+  variant: ESP32S3
+  framework:
+    type: esp-idf
+
+# Configuration
+substitutions:
+
+  name: "esp-shub-lazienka"
+  friendly_name: "Sensor Hub"
+
+  # Debug
+  hide_diagnostic_components: "false"
+
+  # Pinout
+  pin_sda:             6
+  pin_scl:             7
+  pin_status_led:      21
+  pin_uart_tx:         2
+  pin_uart_rx:         1
+  pin_presence:        3
+
+packages:
+  - !include packages/template.yaml
+  - !include packages/ld2420.yaml
+  - !include packages/status_led_ws2812.yaml
+
+# ============================================================================
