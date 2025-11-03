@@ -44,6 +44,10 @@ sensor:
   - platform: ld2420
     moving_distance:
       name : "Moving distance"
+      filters:
+        - clamp:
+            min_value: 40
+            ignore_out_of_range: true
       on_value:
         - switch.turn_on: motion_detected
         - script.execute: motion_timer
