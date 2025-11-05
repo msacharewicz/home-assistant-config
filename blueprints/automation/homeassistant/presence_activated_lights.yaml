@@ -1,0 +1,220 @@
+blueprint:
+  name: Presence-activated light controller with preset memory
+  description: A template for an area-of-influence of a single presence sensor. Remembers and restores the last light status upon return.
+  domain: automation
+  input:
+
+    presence_sensor:
+      name: "Presence sensor"
+      selector:
+        entity:
+          filter:
+            device_class: occupancy
+
+    presence_timeout:
+      name: "Presence timeout"
+      description: "Delay turning the lights off to prevent unnecessary light flipping. This delay is additive to any presence timeouts/delays configured at the presence sensor level."
+      default: 0
+      selector:
+        duration:
+
+    daylight_independent:
+      name: "Turn lights on independently of daylight"
+      description: "Useful for areas with no access to daylight, eg. bathrooms, cellars."
+      default: false
+      selector:
+        boolean:
+
+    lights_off:
+      name: "Lights to turn off upon leaving"
+      description: "Specify all lamps that should be affected by this sensor."
+      selector:
+        target:
+          entity:
+            domain: light
+
+    lights_on:
+      name: "Lights to turn on upon returning"
+      description: "Do you want the whole room to lit up or just one tiny lamp to get the orientation?"
+      selector:
+        target:
+          entity:
+            domain: light
+
+    lights_restore:
+      name: "Lights to track and restore"
+      description: "Saves the status of these lights before turning them off. Upon return, restores the last known setup."
+      selector:
+        target:
+          entity:
+            domain: light
+
+    restore_scene_ttl:
+      name: "Restore state expiration"
+      description: "Expires the stored last state after the defined period of inactivity. Useful when you like to revert lights to a certain default state."
+      default: 0
+      selector:
+        duration:
+
+alias: "{area}: Turn lights on/off based on a presence sensor"
+description: ""
+
+triggers:
+
+  # Trigger when presence begins, no delay
+
+  - trigger: state
+    alias: Entering the area
+    entity_id: !input presence_sensor
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 0
+    id: presence_on
+    to: "on"
+
+  # Trigger when presence ends, with a configured delay
+
+  - trigger: state
+    alias: Leaving the area (delayed)
+    entity_id: !input presence_sensor
+    from: "on"
+    for: !input presence_timeout
+    id: presence_off
+
+conditions: []
+
+actions:
+
+  - variables:
+
+      # Pull some template inputs into variables.
+
+      daylight_independent: !input daylight_independent
+      restore_scene_ttl: !input restore_scene_ttl
+
+      # Generate a name for the temporary light recovery scene
+
+      scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
+
+      # Expand target to get all entities.
+
+      lights_restore: !input lights_restore
+      lights_restore_entities: >
+        {%- set ns = namespace(ret=[]) %}
+        {%- for key in ['device_id', 'area_id', 'entity_id'] %}
+          {%- set items = lights_restore.get(key, [])  %}
+          {%- if items %}
+            {%- set items = [ items ] if items is string else items %}
+            {%- set filt = key.split('_') | first %}
+            {%- set items = items if filt == 'entity' else items | map(filt ~ '_entities') | sum(start=[]) %}
+            {%- set ns.ret = ns.ret + [ items ] %}
+          {%- endif %}
+        {%- endfor %}
+        {{ ns.ret | sum(start=[]) | select( 'search' , '^light' ) | list }}
+
+      # Check if any lights are on
+
+      any_lights_on: "{{ lights_restore_entities | select( 'search' , '^light' ) | select('is_state', 'on') | list | count > 0 }}"
+
+  - choose:
+
+      # Lights on when entering the area
+
+      - conditions:
+
+          - condition: trigger
+            alias: Triggered by entering the area(s)
+            id:
+              - presence_on
+          
+          - condition: template
+            alias: "'No daylight' or 'daylight independent'"
+            value_template: >-
+              {{ states('binary_sensor.daylight') == 'off' or daylight_independent }}
+
+        sequence:
+          - if:
+              - condition: template
+                alias: Temporary scene with last lights state is defined
+                value_template: "{{ states['scene.'+scene_name] != none }}"
+            then:
+
+              # Restore a snapshot state of lights recorded
+              # when leaving last time. Delete the snapshot afterwards.
+
+              - action: scene.turn_on
+                alias: Restore selected lights from the temporary scene
+                metadata: {}
+                data:
+                  entity_id: scene.{{scene_name}}
+              - action: scene.delete
+                alias: Delete the temporary scene
+                metadata: {}
+                data:
+                  entity_id: scene.{{scene_name}}
+
+            else:
+
+              # If no snapshot to restore, just turn on
+              # the default/initial set of lights.
+
+              - action: light.turn_on
+                alias: Turn on default/minimal set of lights
+                metadata: {}
+                data: {}
+                target: !input lights_on
+      
+      # Lights off when leaving the area
+
+      - conditions:
+
+          - condition: trigger
+            alias: Triggered by leaving the area(s)
+            id:
+              - presence_off
+          - condition: template
+            alias: There are any lights turned on
+            value_template: >-
+              {{any_lights_on}}
+
+        sequence:
+
+          # Store a snapshot of the current lights in the area
+          # as a temporary, dynamic scene.
+
+          - action: scene.create
+            alias: Snapshot the selected lights into a temporary scene
+            metadata: {}
+            data:
+              scene_id: "{{scene_name}}"
+              snapshot_entities: >-
+                {{ lights_restore_entities }}
+
+          # Turn off all the defined lights
+
+          - action: light.turn_off
+            alias: Turn off all lights in the area
+            metadata: {}
+            data: {}
+            target: !input lights_off
+
+          # When an expiration time for the stored snapshot
+          # is set, wait for the snapshot to expire and remove it.
+          # Any subsequent calls will break the timeout
+          # due to mode:restart.
+
+          - if:
+              - condition: template
+                alias: Restoration expiration delay has been set
+                value_template: "{{ restore_scene_ttl != 0 }}"
+            then:
+              - delay: !input restore_scene_ttl
+                alias: Wait out the expiration time
+              - action: scene.delete
+                alias: Delete the temporary scene
+                metadata: {}
+                data:
+                  entity_id: scene.{{scene_name}}
+
+mode: restart
