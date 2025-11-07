@@ -1,0 +1,170 @@
+# Template for OXT M222 Tuya/UAScent 2CH WiFi/Matter relay.
+
+# Uascent CB2/UAM02 requires firmware encrypted with their
+# board-stored key, as well as several other parameters
+# configurable as platform.io options to work properly:
+
+esphome:
+  platformio_options:
+
+    # Firmware encryption key, commented out for HA embedded ESPHome 
+    # since a bug in ltchiptool prevents the firmware from building 
+    # without a modification as discussed here:
+    # https://github.com/libretiny-eu/ltchiptool/issues/78
+    #
+    # Great thanks to @kuba2k and @divadiow who guided me through
+    # the hassle with flashing this board type!
+    #
+    # Following line is NOT required for OTA, but IS required for UART flash!
+    # board_build.bkcrypt_coeffs: "4862379a8612784b85c5e25875754528"
+
+    # OTA firmware encryption key, Uacent seems to be using defaults.
+    board_build.bkota.key: "0123456789ABCDEF0123456789ABCDEF"
+    board_build.bkota.iv: "0123456789ABCDEF"
+
+    # OTA partition
+    board_flash.download: "0x143000+0xAE000"
+
+    # WiFi calibration partition
+    board_flash.calibration: "0x1F6000+0x1000"
+
+substitutions:
+
+  # Factory connections
+
+  pin_relay_L1:     P23
+  pin_relay_L2:     P7
+  pin_input_S1:     P26
+  pin_input_S2:     P24
+  pin_button_cover: P8
+  pin_status_led:   P6
+  
+  inverted_status_led: "false"
+
+packages:
+  - !include status_led.yaml
+
+
+# Logger uses TX2 (UART2) port by default. This means both more soldering
+# when in trouble and a hasle with switching UARTs between flashing
+# and debugging. As such, moving logger output to TX1 (UART1).
+
+logger:
+  baud_rate: 115200
+  hardware_uart: UART1
+
+binary_sensor:
+
+  # Sensors on S1 and S2 inputs that connect L through
+  # the wall switch. They toggle the relays upon flipping
+  # the wall switch manually.
+
+  - platform: gpio
+    id: input_S1
+    pin:
+      number: ${pin_input_S1}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_state:
+      then:
+        - switch.toggle: switch_L1
+
+  - platform: gpio
+    id: input_S2
+    pin:
+      number: ${pin_input_S2}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_state:
+      then:
+        - switch.toggle: switch_L2
+
+  # Sensor for the button on the cover. Not really used,
+  # but I copied the default functionality.
+
+  - platform: gpio
+    id: button_cover
+    pin:
+      number: ${pin_button_cover}
+      inverted: true
+      mode: INPUT_PULLUP
+    on_press:
+      then:
+        - switch.toggle: switch_L1
+        - switch.toggle: switch_L2
+
+switch:
+
+  # Relays for L1 and L2 outputs.
+
+  - platform: gpio
+    id: relay_L1
+    pin: ${pin_relay_L1}
+    restore_mode: RESTORE_DEFAULT_OFF
+    internal: true
+
+  - platform: gpio
+    id: relay_L2
+    pin: ${pin_relay_L2}
+    restore_mode: RESTORE_DEFAULT_OFF
+    internal: true
+
+  # These template switches act as proxy controls for the L1 and L2 relays.
+  # I use this setup in situations where I need a "staircase-style" two-way switch
+  # but without running extra physical wiring between the switches.
+  #
+  # Home Assistant syncs the states of a physical relay on one switch and
+  # a virtual one on another. Solves the problem, but this would normally cause
+  # an unnecessary toggle of a "proxy" relay that should not be activated. 
+  # To prevent this, a "virtual mode" flag is used for each relay. When virtual 
+  # mode is enabled, the physical, disconnected relay will not be toggled, 
+  # but the proxy switch state is updated and HA can use it to sync the other switch.
+
+  - platform: template
+    id: switch_L1
+    name: "Relay L1"
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    on_state:
+      if:
+        condition:
+          - switch.is_off: relay_L1_virtual_mode
+        then:
+          - switch.control: 
+              id: relay_L1
+              state: !lambda 'return x;'
+
+  - platform: template
+    id: switch_L2
+    name: "Relay L2"
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    on_state:
+      if:
+        condition:
+          - switch.is_off: relay_L2_virtual_mode
+        then:
+          - switch.control: 
+              id: relay_L2
+              state: !lambda 'return x;'
+
+  # Configuration for "virtual mode" per each relay.
+
+  - platform: template
+    id: relay_L1_virtual_mode
+    name: "Relay L1 virtual mode"
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    entity_category: CONFIG
+    on_turn_on:
+      - switch.turn_off: relay_L1
+
+  - platform: template
+    id: relay_L2_virtual_mode
+    name: "Relay L2 virtual mode"
+    restore_mode: RESTORE_DEFAULT_OFF
+    optimistic: true
+    entity_category: CONFIG
+    on_turn_on:
+      - switch.turn_off: relay_L2
+

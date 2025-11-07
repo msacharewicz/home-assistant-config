@@ -1,0 +1,22 @@
+# Tuya Beken CBU (BK7231N)
+# https://docs.libretiny.eu/boards/cb2s/
+# OXT M222 2CH WiFi/Matter Relay
+# ####
+
+bk72xx:
+  board: cb2s
+
+# Configuration
+substitutions:
+
+  name: "bk72-oxt-lazienka-ext"
+  friendly_name: "OXT M222"
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+packages:
+  - !include packages/template_bk.yaml
+  - !include packages/oxt_m222.yaml
+
+# ============================================================================
