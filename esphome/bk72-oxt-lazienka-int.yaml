@@ -1,7 +1,7 @@
 # Tuya Beken CBU (BK7231N)
 # https://docs.libretiny.eu/boards/cb2s/
 # OXT M222 2CH WiFi/Matter Relay
-# ####
+# https://hurt.id3.pl/product-pol-1174-Modul-OXT-przekaznik-2-obwody-Matter-Wi-Fi-Homekit.html
 
 bk72xx:
   board: cb2s
@@ -20,3 +20,66 @@ packages:
   - !include packages/oxt_m222.yaml
 
 # ============================================================================
+
+# Using UDP to implement stair-switch-like sync between this relay
+# and the [bk72-oxt-lazienka-ext]. For each of these two relays, only
+# L2 is wired to a physical device, while L1 is disconnected and it's
+# switch serves just a logical device to manage the remote partner's L2 output.
+
+udp:
+  - id: udp_tx
+    addresses:
+      - 192.168.1.114
+
+packet_transport:
+  
+  - platform: udp
+    udp_id: udp_tx
+    id: transport_output
+    encryption: !secret api_key
+    rolling_code_enable: true
+    binary_sensors:
+      - switch_L1_state
+      - switch_L2_state
+    providers:
+      - name: bk72-oxt-lazienka-ext
+        encryption: !secret api_key
+
+binary_sensor:
+
+  # These sensors provide information on the local status of the switches
+  # and relay them via the packet_transport to the remote device.
+
+  - platform: template
+    id: switch_L1_state
+    lambda: "return id(switch_L1).state;"
+
+  - platform: template
+    id: switch_L2_state
+    lambda: "return id(switch_L2).state;"
+
+# These sensors import the information on the corresponding sensors
+# from the remote device, and act upon incoming change.
+# It works both ways. Changes on local faux L1 are sent to the remote
+# partner and changes on local real L2 are sent as well to make the
+# remote partner aware of the state of switch.
+
+  - platform: packet_transport
+    id: import_L1_state
+    transport_id: transport_output
+    provider: bk72-oxt-lazienka-ext
+    remote_id: switch_L2_state
+    on_press:
+      switch.turn_on: switch_L1
+    on_release:
+      switch.turn_off: switch_L1
+
+  - platform: packet_transport
+    id: import_L2_state
+    transport_id: transport_output
+    provider: bk72-oxt-lazienka-ext
+    remote_id: switch_L1_state
+    on_press:
+      switch.turn_on: switch_L2
+    on_release:
+      switch.turn_off: switch_L2
