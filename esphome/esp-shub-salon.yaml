@@ -28,6 +28,9 @@ substitutions:
   # Package overrides for 24-LED WS2812-based ring: DFRobot DFR0888-24
   status_led_count:   24
   status_led_order:  GRB
+  status_led_red:   100%
+  status_led_green:  75%
+  status_led_blue:   50%
 
 packages:
   - !include packages/template.yaml

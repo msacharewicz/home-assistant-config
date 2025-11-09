@@ -78,7 +78,7 @@ script:
 
 esphome:
   on_boot:
-    - priority: -800.0
+    - priority: 400.0
       then:
         - if:
             condition:
@@ -147,7 +147,7 @@ binary_sensor:
             copy_from: !lambda |-
               return id(presence_light_params);
             transition_length: !lambda |-
-              return int(min(1000*id(motion_timeout).state/2.0,10000.0));
+              return int(min(1000*id(motion_timeout).state/5.0,5000.0));
         else:
           light.turn_off: status_led_light
 

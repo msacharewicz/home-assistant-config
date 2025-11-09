@@ -14,6 +14,10 @@
 substitutions:
   status_led_count: "1"
   status_led_order: "RGB"
+  status_led_red:   "100%"
+  status_led_green: "100%"
+  status_led_blue:  "100%"
+  
 
 light:
 
@@ -33,6 +37,10 @@ light:
     id: status_led_light
     pin: ${pin_status_led}
     rgb_order: ${status_led_order}
+    color_correct: 
+      - ${status_led_red}
+      - ${status_led_green}
+      - ${status_led_blue}
     chipset: ws2812
     num_leds: ${status_led_count}
     restore_mode: ALWAYS_OFF
