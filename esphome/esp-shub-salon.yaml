@@ -20,10 +20,14 @@ substitutions:
   # Pinout
   pin_sda:             6
   pin_scl:             7
-  pin_status_led:      8
+  pin_status_led:     10 # GPIO8 is a built-in status LED, but using 24-LED ring
   pin_uart_tx:         5
   pin_uart_rx:         4
   pin_presence:        0
+
+  # Package overrides for 24-LED WS2812-based ring: DFRobot DFR0888-24
+  status_led_count:   24
+  status_led_order:  GRB
 
 packages:
   - !include packages/template.yaml

@@ -20,7 +20,7 @@ substitutions:
   # Pinout
   pin_sda:             6
   pin_scl:             7
-  pin_status_led:      8
+  pin_status_led:      8 # built-in status LED
   pin_uart_tx:         5
   pin_uart_rx:         4
   pin_presence:        0

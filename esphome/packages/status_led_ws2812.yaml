@@ -1,16 +1,24 @@
 # My template for WS2812 RGB LED found on some
 # of my boards, specifically:
-# - Waveshare 30547: ESP32-C6-DevKitC-1
+# - Waveshare 30547: ESP32-C6-DevKitC-1 (GPIO8)
+# - Waveshare 25517: ESP32-S3-Zero-M (GPIO21)
 # 
-# It binds the ESPHome staus_led component into
-# the only LED that's available on the boards.
+# It binds the ESPHome staus_led component into the only LED that's available 
+# on the boards.
+#
+# 2025-11-08: 
+# Observation, when attempting to use two WS2812 outputs on the same board, 
+# only one worked. The board complained something about the other WS2812 TX 
+# being not detected.
+
+substitutions:
+  status_led_count: "1"
+  status_led_order: "RGB"
 
 light:
 
-  # The status_led component that serves as
-  # a signal/status source, hidden from user.
-  # Bound to a template output we use to catch
-  # the events.
+  # The status_led component that serves as a signal/status source, hidden from 
+  # user. Bound to a template output we use to catch the events.
 
   - platform: status_led
     id: status_led_source
@@ -18,36 +26,33 @@ light:
     output: status_output
     internal: true
 
-  # The target LED we will be using as our 
-  # actual status_led.
+  # The target LED we will be using as our actual status_led.
 
   - platform: esp32_rmt_led_strip
     name: "Status LED"
     id: status_led_light
     pin: ${pin_status_led}
-    rgb_order: RGB
+    rgb_order: ${status_led_order}
     chipset: ws2812
-    num_leds: 1
+    num_leds: ${status_led_count}
     restore_mode: ALWAYS_OFF
     default_transition_length: 100ms
     entity_category: DIAGNOSTIC
 
 output:
 
-  # The proxy output that relays the state 
-  # of the source status_led into our RGB LED.
+  # The proxy output that relays the state of the source status_led into 
+  # our RGB LED.
 
   - platform: template
     id: status_output
     type: binary
     write_action:
       - lambda: |-
-
-            // When status_led platform takes over our RGB LED,
-            // we store the existing value to restore it later
-            // when the platform shuts down the LED.
-            // Since the RGB LED might be our only LED and we may
-            // be wanting to use it to relay other statuses, this
+            // When status_led platform takes over our RGB LED, we store 
+            // the existing value to restore it later when the platform 
+            // shuts down the LED. Since the RGB LED might be our only LED 
+            // and we may be wanting to use it to relay other statuses, this
             // makes the red blinks weave with our current setting.
 
             static LightColorValues restore_values;
@@ -55,8 +60,7 @@ output:
             
             if (state > 0 && !led_on) {
 
-              // When status_led turns on, store the preexisting 
-              // LED values
+              // When status_led turns on, store the preexisting LED values
 
               restore_values = id(status_led_light).current_values;
 
@@ -74,8 +78,7 @@ output:
             }
             else if ( state == 0 && led_on ) {
 
-              // When status_led turns off, restore 
-              // the previous LED values.
+              // When status_led turns off, restore the previous LED values.
 
               auto call = id(status_led_light).make_call();
               call.set_transition_length(0);
