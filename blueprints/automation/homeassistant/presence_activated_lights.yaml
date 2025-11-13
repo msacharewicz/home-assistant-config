@@ -71,6 +71,7 @@ triggers:
       minutes: 0
       seconds: 0
     id: presence_on
+    from: "off"
     to: "on"
 
   # Trigger when presence ends, with a configured delay
@@ -79,6 +80,7 @@ triggers:
     alias: Leaving the area (delayed)
     entity_id: !input presence_sensor
     from: "on"
+    to: "off"
     for: !input presence_timeout
     id: presence_off
 
