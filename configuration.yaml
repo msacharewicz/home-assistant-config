@@ -6,7 +6,9 @@ frontend:
   themes: !include_dir_merge_named themes
 
 automation: !include automations.yaml
-script: !include scripts.yaml
+script: 
+  !include scripts.yaml
+  !include_dir_merge_named scripts/
 scene: !include scenes.yaml
 
 logger:
@@ -67,7 +69,8 @@ command_line:
       scan_interval: 60
       
       # Finds the last PINGRESP line
-      command: 'grep "Received PINGRESP" /config/home-assistant.log | tail -1'
+      # command: 'grep "Received PINGRESP" /config/home-assistant.log | tail -1'
+      command: 'ha core logs | grep "Received PINGRESP" | tail -1'
 
       # Sensor available if at least one PINGRESP line present
       availability: "{{ value is not none and value | length > 0 }}"

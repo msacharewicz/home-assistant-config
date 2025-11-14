@@ -19,7 +19,7 @@ blueprint:
         duration:
 
     daylight_independent:
-      name: "Turn lights on independently of daylight"
+      name: "Turn lights on during the day too"
       description: "Useful for areas with no access to daylight, eg. bathrooms, cellars."
       default: false
       selector:
@@ -44,6 +44,15 @@ blueprint:
     lights_restore:
       name: "Lights to track and restore"
       description: "Saves the status of these lights before turning them off. Upon return, restores the last known setup."
+      selector:
+        target:
+          entity:
+            domain: light
+
+    lights_restore_exclude:
+      name: "Lights excluded from tracking/restoring"
+      description: "Optional, excludes specific lights from being restored."
+      default: []
       selector:
         target:
           entity:
@@ -88,6 +97,20 @@ conditions: []
 
 actions:
 
+  # Expand target selectors into entities.
+
+  - action: script.expand_entities
+    response_variable: lights_restore
+    data:
+      target: !input lights_restore
+      domain: light
+
+  - action: script.expand_entities
+    response_variable: lights_restore_exclude
+    data:
+      target: !input lights_restore_exclude
+      domain: light
+
   - variables:
 
       # Pull some template inputs into variables.
@@ -99,25 +122,15 @@ actions:
 
       scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
 
-      # Expand target to get all entities.
+      # Generate the list of lights to be restored.
 
-      lights_restore: !input lights_restore
-      lights_restore_entities: >
-        {%- set ns = namespace(ret=[]) %}
-        {%- for key in ['device_id', 'area_id', 'entity_id'] %}
-          {%- set items = lights_restore.get(key, [])  %}
-          {%- if items %}
-            {%- set items = [ items ] if items is string else items %}
-            {%- set filt = key.split('_') | first %}
-            {%- set items = items if filt == 'entity' else items | map(filt ~ '_entities') | sum(start=[]) %}
-            {%- set ns.ret = ns.ret + [ items ] %}
-          {%- endif %}
-        {%- endfor %}
-        {{ ns.ret | sum(start=[]) | select( 'search' , '^light' ) | list }}
+      lights_restore_entities: |
+        {{ lights_restore.entities | difference(lights_restore_exclude.entities) | select('is_state', 'on') | list }}
 
       # Check if any lights are on
 
-      any_lights_on: "{{ lights_restore_entities | select( 'search' , '^light' ) | select('is_state', 'on') | list | count > 0 }}"
+      any_lights_on: >
+        {{ lights_restore_entities | count > 0 }}
 
   - choose:
 

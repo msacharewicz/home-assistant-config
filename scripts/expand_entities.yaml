@@ -1,0 +1,45 @@
+expand_entities:
+  alias: Expand entities
+  description: 'Returns the list of entities inside a target selector that belong
+    to the requested domain.'
+  icon: mdi:expand-all
+  mode: parallel
+  fields:
+    target:
+      name: Target selector
+      description: A Home Assistant target selector
+      required: true
+      selector:
+        target: {}
+    domain:
+      name: Required domain
+      description: Domain to filter for (e.g. "light", "switch", ...)
+      required: true
+      selector:
+        text: {}
+  sequence:
+  - variables:
+      result: |
+        {%- if target %}
+
+          {%- set ns = namespace(ret=[]) %}
+          
+          {%- for key in ['device_id', 'area_id', 'entity_id'] %}
+            {%- set items = target.get(key, [])  %}
+            {%- if items %}
+              {%- set items = [ items ] if items is string else items %}
+              {%- set filt = key.split('_') | first %}
+              {%- set items = items if filt == 'entity' else items | map(filt ~ '_entities') | sum(start=[]) %}
+              {%- set ns.ret = ns.ret + [ items ] %}
+            {%- endif %}
+          {%- endfor %}
+          
+          {{ { 'entities': ns.ret | sum(start=[]) | select( 'search' , '^'+domain ) | list } }}
+
+        {%- else %}
+
+          {{ { 'entities': [] | list } }}
+
+        {%- endif %}
+  - stop: done
+    response_variable: result
