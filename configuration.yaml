@@ -7,8 +7,8 @@ frontend:
 
 automation: !include automations.yaml
 script: 
-  !include scripts.yaml
-  !include_dir_merge_named scripts/
+  - !include scripts.yaml
+  - !include_dir_merge_named scripts/
 scene: !include scenes.yaml
 
 logger:

@@ -93,60 +93,96 @@ triggers:
     for: !input presence_timeout
     id: presence_off
 
+  # Trigger when presence ends, with a configured delay
+
+  - trigger: state
+    entity_id:
+      - binary_sensor.daylight
+    from: "on"
+    id: daylight_off
+
 conditions: []
 
 actions:
 
-  # Expand target selectors into entities.
 
-  - action: script.expand_entities
-    response_variable: lights_restore
-    data:
-      target: !input lights_restore
-      domain: light
+  - alias: "Prepare automation"
+    sequence:
 
-  - action: script.expand_entities
-    response_variable: lights_restore_exclude
-    data:
-      target: !input lights_restore_exclude
-      domain: light
+    # Expand target selectors into entities.
 
-  - variables:
+      - action: script.expand_entities
+        response_variable: lights_restore
+        data:
+          target: !input lights_restore
+          domain: light
 
-      # Pull some template inputs into variables.
+      - action: script.expand_entities
+        response_variable: lights_restore_exclude
+        data:
+          target: !input lights_restore_exclude
+          domain: light
 
-      daylight_independent: !input daylight_independent
-      restore_scene_ttl: !input restore_scene_ttl
+      - variables:
 
-      # Generate a name for the temporary light recovery scene
+          # Pull some template inputs into variables.
 
-      scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
+          daylight_independent: !input daylight_independent
+          restore_scene_ttl: !input restore_scene_ttl
 
-      # Generate the list of lights to be restored.
+          # Generate a name for the temporary light recovery scene
 
-      lights_restore_entities: |
-        {{ lights_restore.entities | difference(lights_restore_exclude.entities) | select('is_state', 'on') | list }}
+          scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
 
-      # Check if any lights are on
+          # Generate the list of lights to be restored.
 
-      any_lights_on: >
-        {{ lights_restore_entities | count > 0 }}
+          lights_restore_entities: |
+            {{ lights_restore.entities | difference(lights_restore_exclude.entities) | select('is_state', 'on') | list }}
+
+          # Check if any lights are on
+
+          any_lights_on: >
+            {{ lights_restore_entities | count > 0 }}
 
   - choose:
 
-      # Lights on when entering the area
+      # Conditions for lights ON
 
-      - conditions:
+      - alias: "Lights ON"
+        conditions:
 
-          - condition: trigger
-            alias: Triggered by entering the area(s)
-            id:
-              - presence_on
-          
-          - condition: template
-            alias: "'No daylight' or 'daylight independent'"
-            value_template: >-
-              {{ states('binary_sensor.daylight') == 'off' or daylight_independent }}
+          - condition: or
+            conditions:
+
+              # Lights on when entering the area(s)
+
+              - condition: and
+                alias: "Triggered by entering the area(s): when no daylight or daylight-independent"
+                conditions:
+                  - condition: trigger
+                    alias: "Triggered by entering the area(s)"
+                    id:
+                      - presence_on
+                  - condition: template
+                    alias: "'No daylight' or 'daylight independent'"
+                    value_template: >-
+                      {{ states('binary_sensor.daylight') == 'off' or daylight_independent }}
+
+                # Lights on when when daylight ends whilepresence is detected 
+                # in the area(s).
+                
+              - condition: and
+                alias: "Triggered by daylight ending: when someone's present in the area(s)"
+                conditions:
+                  - condition: trigger
+                    alias: "Triggered by daylight ending"
+                    id:
+                      - daylight_off
+                  - condition: state
+                    alias: "Someone's present in the area(s)"
+                    entity_id: !input presence_sensor
+                    state:
+                      - "on"
 
         sequence:
           - if:
@@ -180,9 +216,12 @@ actions:
                 data: {}
                 target: !input lights_on
       
-      # Lights off when leaving the area
+      # Conditions for lights off
 
-      - conditions:
+      - alias: "Lights OFF"
+        conditions:
+
+          # Lights off when leaving the area
 
           - condition: trigger
             alias: Triggered by leaving the area(s)
