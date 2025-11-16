@@ -6,6 +6,7 @@ blueprint:
 
     presence_sensor:
       name: "Presence sensor"
+      description: "It's presence will manage the lights turning on and off. Can be shared between any automation or set of lights."
       selector:
         entity:
           filter:
@@ -19,39 +20,48 @@ blueprint:
         duration:
 
     daylight_independent:
-      name: "Turn lights on during the day too"
-      description: "Useful for areas with no access to daylight, eg. bathrooms, cellars."
+      name: "Turn the lights on during the day"
+      description: "By default the automation lights up lights only after daylight is gone. Toggle this on for areas with no access to daylight, eg. bathrooms, cellars."
       default: false
       selector:
         boolean:
 
-    lights_off:
-      name: "Lights to turn off upon leaving"
-      description: "Specify all lamps that should be affected by this sensor."
+    lights_on:
+      name: "Lights to be turned on"
+      description: "Will be always turned on upon entering the area(s) or being present in the area when the daylight ends."
       selector:
         target:
           entity:
             domain: light
 
-    lights_on:
-      name: "Lights to turn on upon returning"
-      description: "Do you want the whole room to lit up or just one tiny lamp to get the orientation?"
+    lights_off:
+      name: "Lights to be turned off"
+      description: "Will be always turned off upon leaving the area(s)"
+      selector:
+        target:
+          entity:
+            domain: light
+
+    lights_off_exclude:
+      name: "...excluding these lights"
+      description: "Optional, excludes selected lights from the above set."
+      default: []
       selector:
         target:
           entity:
             domain: light
 
     lights_restore:
-      name: "Lights to track and restore"
-      description: "Saves the status of these lights before turning them off. Upon return, restores the last known setup."
+      name: "Lights to be tracked and restored"
+      description: "Will be turned on upon entering the area(s) if they were turned on when leaving last time."
       selector:
         target:
           entity:
             domain: light
 
     lights_restore_exclude:
-      name: "Lights excluded from tracking/restoring"
-      description: "Optional, excludes specific lights from being restored."
+      name: "...excluding these lights"
+      description: "Optional, excludes selected lights from the above set."
       default: []
       selector:
         target:
@@ -60,7 +70,7 @@ blueprint:
 
     restore_scene_ttl:
       name: "Restore state expiration"
-      description: "Expires the stored last state after the defined period of inactivity. Useful when you like to revert lights to a certain default state."
+      description: "Optional, prevents lights being restored after the defined period of inactivity has passed. Useful when you like to revert lights to a certain default state."
       default: 0
       selector:
         duration:
@@ -112,6 +122,18 @@ actions:
     # Expand target selectors into entities.
 
       - action: script.expand_entities
+        response_variable: lights_off
+        data:
+          target: !input lights_off
+          domain: light
+
+      - action: script.expand_entities
+        response_variable: lights_off_exclude
+        data:
+          target: !input lights_off_exclude
+          domain: light
+
+      - action: script.expand_entities
         response_variable: lights_restore
         data:
           target: !input lights_restore
@@ -134,7 +156,12 @@ actions:
 
           scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
 
-          # Generate the list of lights to be restored.
+          # Generate the list of lights to be turned off when no presence.
+
+          lights_off_entities: |
+            {{ lights_off.entities | difference(lights_off_exclude.entities) | select('is_state', 'on') | list }}
+
+          # Generate the list of lights to be saved when turning off and restored when presence is back.
 
           lights_restore_entities: |
             {{ lights_restore.entities | difference(lights_restore_exclude.entities) | select('is_state', 'on') | list }}
@@ -251,7 +278,9 @@ actions:
             alias: Turn off all lights in the area
             metadata: {}
             data: {}
-            target: !input lights_off
+            target: 
+              entity_id: >
+                {{ lights_off_entities }}
 
           # When an expiration time for the stored snapshot
           # is set, wait for the snapshot to expire and remove it.
