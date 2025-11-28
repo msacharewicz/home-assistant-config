@@ -18,10 +18,21 @@ substitutions:
   hide_diagnostic_components: "true"
 
   # Pinout
-  pin_status_led:      21
+  pin_status_led:       5
+  status_led_count:    22
+  status_led_order:   GRB
 
 packages:
   - !include packages/template.yaml
   - !include packages/status_led_ws2812.yaml
 
 # ============================================================================
+
+light:
+
+  - id: !extend status_led_light
+    name: "Komputer (LED)"
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: !remove
+
+
