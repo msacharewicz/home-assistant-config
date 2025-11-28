@@ -392,7 +392,7 @@ interval:
           
           // Run only when Auto preset is on.
 
-          if (id(hub_fan).preset_mode != "Auto") return;
+          if (id(hub_fan).get_preset_mode() != "Auto") return;
 
           // Get the sensor values. Those that I need and those that I don't need too.
           // One day they might get handy... ^_^
