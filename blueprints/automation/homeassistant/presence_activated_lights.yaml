@@ -29,6 +29,7 @@ blueprint:
     lights_on:
       name: "Lights to be turned on"
       description: "Will be always turned on upon entering the area(s) or being present in the area when the daylight ends."
+      default: []
       selector:
         target:
           entity:
@@ -37,6 +38,7 @@ blueprint:
     lights_off:
       name: "Lights to be turned off"
       description: "Will be always turned off upon leaving the area(s)"
+      default: []
       selector:
         target:
           entity:
@@ -54,6 +56,7 @@ blueprint:
     lights_restore:
       name: "Lights to be tracked and restored"
       description: "Will be turned on upon entering the area(s) if they were turned on when leaving last time."
+      default: []
       selector:
         target:
           entity:
@@ -122,6 +125,12 @@ actions:
     # Expand target selectors into entities.
 
       - action: script.expand_entities
+        response_variable: lights_on
+        data:
+          target: !input lights_on
+          domain: light
+
+      - action: script.expand_entities
         response_variable: lights_off
         data:
           target: !input lights_off
@@ -155,6 +164,9 @@ actions:
           # Generate a name for the temporary light recovery scene
 
           scene_name: "{{ 'tmp_restorable_lights_for_' + this.entity_id | slugify() }}"
+
+          lights_on_entities: |
+            {{ lights_on.entities | select('is_state', 'off') | list }}
 
           # Generate the list of lights to be turned off when no presence.
 
@@ -233,15 +245,22 @@ actions:
                   entity_id: scene.{{scene_name}}
 
             else:
+            - if:
+                - condition: template
+                  alias: Lights to be always turned on are defined
+                  value_template: "{{ lights_on_entities != none }}"
+              then:
 
-              # If no snapshot to restore, just turn on
-              # the default/initial set of lights.
+                # If no snapshot to restore, just turn on
+                # the default/initial set of lights.
 
-              - action: light.turn_on
-                alias: Turn on default/minimal set of lights
-                metadata: {}
-                data: {}
-                target: !input lights_on
+                - action: light.turn_on
+                  alias: Turn on default/minimal set of lights
+                  metadata: {}
+                  data: {}
+                  target: 
+                    entity_id: >
+                      {{ lights_on_entities }}
       
       # Conditions for lights off
 
@@ -258,6 +277,9 @@ actions:
             alias: There are any lights turned on
             value_template: >-
               {{any_lights_on}}
+          - condition: template
+            alias: Lights to be turned off are defined
+            value_template: "{{ lights_off_entities != none }}"
 
         sequence:
 
