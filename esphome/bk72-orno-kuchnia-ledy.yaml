@@ -20,3 +20,32 @@ packages:
   - !include packages/orno_sh17101.yaml
 
 # ============================================================================
+
+# Using UDP to implement remote control from another ESPHome-managed switch.
+
+udp:
+  - id: udp_tx
+    addresses:
+      - 192.168.1.108
+
+packet_transport:
+  
+  - platform: udp
+    udp_id: udp_tx
+    id: transport_output
+    encryption: !secret api_key
+    rolling_code_enable: true
+    binary_sensors:
+      - input_S2_state
+    providers:
+      - name: esp-maan-hub-v2
+        encryption: !secret api_key
+
+binary_sensor:
+
+  # This sensor provides information on the local status of the required
+  # switch and is relayed via the packet_transport to the remote device.
+
+  - platform: template
+    id: input_S2_state
+    lambda: "return id(input_S2).state;"
