@@ -106,18 +106,18 @@ triggers:
     for: !input presence_timeout
     id: presence_off
 
-  # Trigger when presence ends, with a configured delay
+  # Trigger when sun rises
 
   - trigger: state
     entity_id:
       - binary_sensor.daylight
     from: "on"
+    to: "off"
     id: daylight_off
 
 conditions: []
 
 actions:
-
 
   - alias: "Prepare automation"
     sequence:
