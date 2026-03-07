@@ -20,3 +20,32 @@ packages:
   - !include packages/orno_sh17101.yaml
 
 # ============================================================================
+
+# Using UDP to allow managing the local L2 relay from [bk72-oxt-salon-taras]
+
+udp:
+  - id: udp_platform
+    addresses:
+      - 192.168.1.123 # bk72-oxt-salon-taras
+
+packet_transport:
+
+  - platform: udp
+    udp_id: udp_platform
+    id: udp_transport
+    providers:
+      - name: bk72-oxt-salon-taras
+        encryption: !secret api_key
+
+# This sensor imports the information on the corresponding relay
+# from the remote device, and acts upon incoming change.
+
+binary_sensor:
+
+  - platform: packet_transport
+    id: import_L2_state
+    transport_id: udp_transport
+    provider: bk72-oxt-salon-taras
+    remote_id: switch_L2_state
+    on_state:
+      switch.toggle: relay_L1
