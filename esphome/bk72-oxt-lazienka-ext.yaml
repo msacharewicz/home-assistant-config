@@ -21,65 +21,38 @@ packages:
 
 # ============================================================================
 
-# Using UDP to implement stair-switch-like sync between this relay
-# and the [bk72-oxt-lazienka-int]. For each of these two relays, only
-# L2 is wired to a physical device, while L1 is disconnected and it's
-# switch serves just a logical device to manage the remote partner's L2 output.
+# Using UDP to allow managing the local L2 relay from [bk72-oxt-lazienka-int]. 
+# For each of these two relays, only the L2 is wired to a physical device, 
+# while L1 is disconnected and it's switch serves just a logical device 
+# to manage the remote partner's L2 output.
 
 udp:
-  - id: udp_tx
+  - id: udp_component
     addresses:
-      - 192.168.1.113
+      - 192.168.1.113 # bk72-oxt-lazienka-int
 
 packet_transport:
   
   - platform: udp
-    udp_id: udp_tx
-    id: transport_output
+    udp_id: udp_component
+    id: udp_transport
     encryption: !secret api_key
     rolling_code_enable: true
     binary_sensors:
-      - switch_L1_state
-      - switch_L2_state
+      - input_S1
     providers:
       - name: bk72-oxt-lazienka-int
         encryption: !secret api_key
 
-binary_sensor:
-
-  # These sensors provide information on the local status of the switches
-  # and relay them via the packet_transport to the remote device.
-
-  - platform: template
-    id: switch_L1_state
-    lambda: "return id(switch_L1).state;"
-
-  - platform: template
-    id: switch_L2_state
-    lambda: "return id(switch_L2).state;"
-
 # These sensors import the information on the corresponding sensors
 # from the remote device, and act upon incoming change.
-# It works both ways. Changes on local faux L1 are sent to the remote
-# partner and changes on local real L2 are sent as well to make the
-# remote partner aware of the state of switch.
+
+binary_sensor:
 
   - platform: packet_transport
-    id: import_L1_state
-    transport_id: transport_output
+    id: lazienka_int_S1_state
+    transport_id: udp_transport
     provider: bk72-oxt-lazienka-int
-    remote_id: switch_L2_state
-    on_press:
-      switch.turn_on: switch_L1
-    on_release:
-      switch.turn_off: switch_L1
-
-  - platform: packet_transport
-    id: import_L2_state
-    transport_id: transport_output
-    provider: bk72-oxt-lazienka-int
-    remote_id: switch_L1_state
-    on_press:
-      switch.turn_on: switch_L2
-    on_release:
-      switch.turn_off: switch_L2
+    remote_id: input_S1
+    on_state:
+      switch.toggle: switch_L2

@@ -654,10 +654,10 @@ binary_sensor:
 
   # Remote control from bk72-orno-kuchnia-ledy
   - platform: packet_transport
-    id: import_kuchnia_ledy_L2_state
-    transport_id: transport_input
+    id: kuchnia_ledy_S2_state
+    transport_id: udp_transport
     provider: bk72-orno-kuchnia-ledy
-    remote_id: input_S2_state
+    remote_id: input_S2
     on_state:
       light.toggle: hub_lamp
 
@@ -739,21 +739,19 @@ button:
     internal: ${hide_diagnostic_components}
     entity_category: DIAGNOSTIC
 
-# Using UDP to implement stair-switch-like sync between this relay
-# and the [bk72-oxt-lazienka-int]. For each of these two relays, only
-# L2 is wired to a physical device, while L1 is disconnected and it's
-# switch serves just a logical device to manage the remote partner's L2 output.
+# Using UDP to allow managing the local lamp relay from [bk72-orno-kuchnia-ledy],
+# further implemented by binary_sensor: kuchnia_ledy_S2_state somewhere above.
 
 udp:
-  - id: udp_rx
+  - id: udp_component
     addresses:
-      - 192.168.1.105
+      - 192.168.1.105 # bk72-orno-kuchnia-ledy
 
 packet_transport:
   
   - platform: udp
-    udp_id: udp_rx
-    id: transport_input
+    udp_id: udp_component
+    id: udp_transport
     providers:
       - name: bk72-orno-kuchnia-ledy
         encryption: !secret api_key

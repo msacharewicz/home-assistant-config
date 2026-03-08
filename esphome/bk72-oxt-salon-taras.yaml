@@ -24,25 +24,16 @@ packages:
 # Using UDP to manage a remote relay on [bk72-orno-salon] via the L2 switch
 
 udp:
-  - id: udp_platform
+  - id: udp_component
     addresses:
       - 192.168.1.102 # bk72-orno-salon
 
 packet_transport:
 
   - platform: udp
-    udp_id: udp_platform
+    udp_id: udp_component
     id: udp_transport
     encryption: !secret api_key
     rolling_code_enable: true
     binary_sensors:
-      - switch_L2_state
-
-binary_sensor:
-
-  # These sensors provide information on the local status of the switches
-  # and relay them via the packet_transport to the remote device.
-
-  - platform: template
-    id: switch_L2_state
-    lambda: "return id(switch_L2).state;"
+      - input_S2

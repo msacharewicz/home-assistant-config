@@ -21,31 +21,22 @@ packages:
 
 # ============================================================================
 
-# Using UDP to implement remote control from another ESPHome-managed switch.
+# Using UDP to manage a remote lamp on [esp-maan-hub-v2] via the S2 switch
 
 udp:
-  - id: udp_tx
+  - id: udp_component
     addresses:
-      - 192.168.1.108
+      - 192.168.1.108 # esp-maan-hub-v2
 
 packet_transport:
   
   - platform: udp
-    udp_id: udp_tx
-    id: transport_output
+    udp_id: udp_component
+    id: udp_transport
     encryption: !secret api_key
     rolling_code_enable: true
     binary_sensors:
-      - input_S2_state
+      - input_S2
     providers:
       - name: esp-maan-hub-v2
         encryption: !secret api_key
-
-binary_sensor:
-
-  # This sensor provides information on the local status of the required
-  # switch and is relayed via the packet_transport to the remote device.
-
-  - platform: template
-    id: input_S2_state
-    lambda: "return id(input_S2).state;"
