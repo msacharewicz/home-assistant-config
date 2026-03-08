@@ -1,0 +1,32 @@
+blueprint:
+  name: Proxy switch
+  description: Toggle target device via a remote proxy switch
+  domain: automation
+  input:
+    target:
+      name: "Target device"
+      selector:
+        entity:
+          filter:
+            domain:
+              - light
+              - switch
+              - fan
+    proxy:
+      name: "Proxy switch"
+      selector:
+        entity:
+          filter:
+            domain:
+              - switch
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input proxy
+
+actions:
+  - action: homeassistant.toggle
+    target: 
+      entity_id: !input target
