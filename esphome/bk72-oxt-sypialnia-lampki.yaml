@@ -1,0 +1,55 @@
+# Tuya Beken CBU (BK7231N)
+# https://docs.libretiny.eu/boards/cb2s/
+# OXT M222 2CH WiFi/Matter Relay
+# https://hurt.id3.pl/product-pol-1174-Modul-OXT-przekaznik-2-obwody-Matter-Wi-Fi-Homekit.html
+
+bk72xx:
+  board: cb2s
+
+# Configuration
+substitutions:
+
+  name: "bk72-oxt-sypialnia-lampki"
+  friendly_name: "OXT M222"
+
+  # Debug
+  hide_diagnostic_components: "true"
+
+packages:
+  - !include packages/template_bk.yaml
+  - !include packages/oxt_m222.yaml
+
+# ============================================================================
+
+# Using UDP to allow managing local relays from [bk72-oxt-sypialnia-sufit]
+
+udp:
+  - id: udp_component
+    addresses:
+      - 192.168.1.122 # bk72-oxt-sypialnia-sufit
+
+packet_transport:
+
+  - platform: udp
+    udp_id: udp_component
+    id: udp_transport
+    providers:
+      - name: bk72-oxt-sypialnia-sufit
+        encryption: !secret api_key
+
+# This sensor imports the information on the corresponding relay
+# from the remote device, and acts upon incoming change.
+
+binary_sensor:
+
+  - platform: packet_transport
+    id: salon_taras_input_S2
+    transport_id: udp_transport
+    provider: bk72-oxt-sypialnia-sufit
+    remote_id: input_S2
+    on_state:
+      # Set both relays based on the L1 toggled state
+      - switch.toggle: switch_L1
+      - switch.control:
+          id: switch_L2
+          state: !lambda return id(switch_L1).state;
