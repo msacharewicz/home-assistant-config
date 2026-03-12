@@ -43,13 +43,21 @@ packet_transport:
 binary_sensor:
 
   - platform: packet_transport
-    id: salon_taras_input_S2
+    id: sypialnia_sufit_input_S2
     transport_id: udp_transport
     provider: bk72-oxt-sypialnia-sufit
     remote_id: input_S2
     on_state:
-      # Set both relays based on the L1 toggled state
-      - switch.toggle: switch_L1
-      - switch.control:
-          id: switch_L2
-          state: !lambda return id(switch_L1).state;
+
+      # If any lamp is on, turn them both off. Otherwise turn both on.
+
+      - if:
+          condition:
+            lambda: |-
+              return id(switch_L1).state || id(switch_L2).state;
+          then:
+            - switch.turn_off: switch_L1
+            - switch.turn_off: switch_L2
+          else:
+            - switch.turn_on: switch_L1
+            - switch.turn_on: switch_L2
