@@ -25,6 +25,12 @@ mode: single
 triggers:
   - trigger: state
     entity_id: !input proxy
+    not_to:
+      - unavailable
+      - unknown
+    not_from:
+      - unavailable
+      - unknown
 
 actions:
   - action: homeassistant.toggle

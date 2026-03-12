@@ -26,12 +26,26 @@ mode: single
 # of which one initiated the change.
 
 triggers:
+
   - trigger: state
     entity_id: !input device_A
     id: changed_by_A
+    not_to:
+      - unavailable
+      - unknown
+    not_from:
+      - unavailable
+      - unknown
+      
   - trigger: state
     entity_id: !input device_B
     id: changed_by_B
+    not_to:
+      - unavailable
+      - unknown
+    not_from:
+      - unavailable
+      - unknown
 
 actions:
   - variables:
